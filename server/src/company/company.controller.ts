@@ -1,10 +1,8 @@
-// src/companies/companies.controller.ts
 import {
   Controller,
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   HttpCode,
@@ -44,7 +42,6 @@ export class CompanyController {
   }
 
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.companiesService.remove(id);
   }
