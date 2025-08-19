@@ -9,6 +9,8 @@ import {
   HttpStatus,
   HttpCode,
   Put,
+  Query,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -24,8 +26,11 @@ export class UserController {
   }
 
   @Get()
-  async findAll() {
-    return this.usersService.findAll();
+  async findAll(
+    @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.usersService.findAll(page, limit);
   }
 
   @Get(':id')

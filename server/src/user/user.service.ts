@@ -52,14 +52,46 @@ export class UserService {
     return result;
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      where: { deletedAt: null },
-      include: {
-        company: true,
+  async findAll(page: number = 0, limit: number = 10) {
+    const skip = page * limit;
+
+    // Build where clause
+    const where: any = { deletedAt: null };
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          companyId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      data: users,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { name: 'asc' },
-    });
+    };
   }
 
   async findOne(id: number) {
@@ -90,13 +122,13 @@ export class UserService {
   }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: { email, deletedAt: null },
     });
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
 
@@ -106,8 +138,11 @@ export class UserService {
 
     // Check if email is being changed and if it already exists
     if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email: updateUserDto.email },
+      const existingUser = await this.prisma.user.findFirst({
+        where: {
+          email: updateUserDto.email.toLowerCase().trim(),
+          id: { not: id },
+        },
       });
 
       if (existingUser) {
@@ -151,7 +186,7 @@ export class UserService {
   }
 
   async remove(id: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
 
@@ -163,22 +198,34 @@ export class UserService {
     return this.prisma.user.update({
       where: { id },
       data: { deletedAt: new Date() },
+      select: {
+        id: true,
+        deletedAt: true,
+        name: true,
+      },
     });
   }
 
   async restore(id: number) {
-    const company = await this.prisma.company.findUnique({
+    // find any user by id (deleted or not)
+    const user = await this.prisma.user.findUnique({
       where: { id },
     });
 
-    if (!company) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    // restore
     return this.prisma.user.update({
       where: { id },
       data: {
         deletedAt: null,
+      },
+      select: {
+        id: true,
+        deletedAt: true,
+        name: true,
       },
     });
   }

@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -10,7 +11,7 @@ import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {
   @IsNotEmpty()
-  @IsString()
+  @IsNumber()
   companyId: number;
 
   @IsNotEmpty()
