@@ -5,6 +5,8 @@ import { PrismaService } from './prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { GuardModule } from './guard/guard.module';
+import { QualificationModule } from './qualification/qualification.module';
 import { ClientModule } from './client/client.module';
 import { AppService } from './app.service';
 
@@ -14,6 +16,8 @@ import { AppService } from './app.service';
     AuthModule,
     UserModule,
     CompanyModule,
+    GuardModule,
+    QualificationModule,
     ClientModule,
   ],
   providers: [AppService, PrismaService],
