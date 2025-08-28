@@ -1,20 +1,31 @@
-FROM node:18-alpine
-
+# backend/Dockerfile
+FROM node:18-alpine AS base
 WORKDIR /usr/src/app
 
-# install packages required for waiting for postgres
-RUN apk add --no-cache postgresql-client bash
+# system packages needed
+RUN apk add --no-cache bash postgresql-client
 
-# install deps
+# copy package json / lock first for caching
 COPY package*.json ./
-RUN npm ci --production=false
+RUN npm ci
 
-# copy rest of the code
+# copy source
 COPY . .
 
-# make entrypoint executable
-RUN chmod +x ./entrypoint.sh
+# generate prisma client and build
+RUN npx prisma generate
+RUN npm run build
+
+# production image (smaller)
+FROM node:18-alpine AS runner
+WORKDIR /usr/src/app
+RUN apk add --no-cache bash postgresql-client
+
+COPY --from=base /usr/src/app/package*.json ./
+COPY --from=base /usr/src/app/node_modules ./node_modules
+COPY --from=base /usr/src/app/dist ./dist
+COPY --from=base /usr/src/app/prisma ./prisma
+COPY --from=base /usr/src/app/.env ./
 
 EXPOSE 3001
-
-CMD ["./entrypoint.sh"]
+CMD ["node", "dist/main.js"]

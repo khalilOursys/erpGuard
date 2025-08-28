@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from 'src/prisma.service';
@@ -9,6 +9,11 @@ export class AuthService {
 
   // validate user by identifier + password
   async validateUser(identifier: string, pass: string) {
+    if (!identifier || !pass) {
+      // invalid request shape
+      throw new BadRequestException('identifier and password are required');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { identifier } });
     if (!user || user.deletedAt) return null;
     const match = await bcrypt.compare(pass, user.password);
