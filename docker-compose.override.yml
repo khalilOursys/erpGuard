@@ -1,0 +1,15 @@
+services:
+  server:
+    command: ["npm", "run", "start:dev"]
+    volumes:
+      - ./server:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - PRISMA_MIGRATE=false
+      - RUN_SEED=false
+
+  frontend:
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules

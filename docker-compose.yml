@@ -13,10 +13,10 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   pgadmin:
-    image: dpage/pgadmin4:7
+    image: dpage/pgadmin4:9
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
@@ -29,14 +29,15 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    env_file: 
+    env_file:
       - ./server/.env
     ports:
       - "3001:3001"
     depends_on:
       - db
     volumes:
-      - ./server:/usr/src/app
+      # mount source only if you actually want it; for prod build remove this
+      - ./server:/usr/src/app:cached
     command: ["/usr/src/app/entrypoint.sh"]
 
   frontend:
@@ -47,8 +48,8 @@ services:
       - "3000:3000"
     depends_on:
       - server
-    environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    volumes:
+      - ./frontend:/usr/src/app:cached
 
 volumes:
   db_data:
