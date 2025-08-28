@@ -1,5 +1,8 @@
 import {
-  Injectable, NotFoundException, ConflictException, BadRequestException,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -19,11 +22,15 @@ export class UserService {
     const identifier = dto.identifier.trim();
 
     // unique identifier check
-    const existing = await this.prisma.user.findUnique({ where: { identifier } });
+    const existing = await this.prisma.user.findUnique({
+      where: { identifier },
+    });
     if (existing) throw new ConflictException('Identifier already exists');
 
     // company check
-    const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: dto.companyId },
+    });
     if (!company) throw new BadRequestException('Company not found');
 
     const hashed = await this.hashPassword(dto.password);
@@ -51,20 +58,56 @@ export class UserService {
     return user;
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      where: { deletedAt: null },
-      select: {
-        id: true,
-        identifier: true,
-        displayname: true,
-        email: true,
-        role: true,
-        companyId: true,
-        createdAt: true,
+  async findAll(page: number = 0, limit: number = 10) {
+    const skip = page * limit;
+
+    // Build where clause
+    const where: any = { deletedAt: null };
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          companyId: true,
+          identifier: true,
+          displayname: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    console.log({
+      data: users,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { id: 'asc' },
     });
+
+    return {
+      data: users,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: number) {
@@ -95,13 +138,17 @@ export class UserService {
 
     // check identifier change uniqueness if provided
     if (dto.identifier && dto.identifier !== user.identifier) {
-      const ex = await this.prisma.user.findUnique({ where: { identifier: dto.identifier } });
+      const ex = await this.prisma.user.findUnique({
+        where: { identifier: dto.identifier },
+      });
       if (ex) throw new ConflictException('Identifier already in use');
     }
 
     // if companyId changed, ensure company exists
     if (dto.companyId && dto.companyId !== user.companyId) {
-      const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
+      const company = await this.prisma.company.findUnique({
+        where: { id: dto.companyId },
+      });
       if (!company) throw new BadRequestException('Company not found');
     }
 
