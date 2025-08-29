@@ -1,50 +1,59 @@
 import {
-  Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, UseGuards, HttpCode,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  ParseIntPipe,
+  HttpStatus,
+  HttpCode,
+  Put,
+  Query,
+  DefaultValuePipe,
 } from '@nestjs/common';
-import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { AuthGuard } from '@nestjs/passport';
-import { PermissionsGuard } from 'src/common/guards/permissions.guard';
-import { RequirePermissions } from 'src/common/decorators/require-permissions.decorator';
+import { UserService } from './user.service';
 
-@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('users')
 export class UserController {
   constructor(private readonly usersService: UserService) {}
 
   @Post()
-  @RequirePermissions('company.manage') // only admins / company managers create users by default
-  create(@Body() createUserDto: CreateUserDto) {
+  async create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
   @Get()
-  @RequirePermissions('company.manage') // list users for company admins
-  findAll() {
-    return this.usersService.findAll();
+  async findAll(
+    @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    console.log(page, limit);
+
+    return this.usersService.findAll(page, limit);
   }
 
   @Get(':id')
-  @RequirePermissions('company.manage')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
   }
 
   @Put(':id')
-  @RequirePermissions('company.manage')
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto) {
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
     return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  @RequirePermissions('company.manage')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  async remove(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.remove(id);
   }
 
   @Post(':id/restore')
-  @RequirePermissions('company.manage')
   restore(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.restore(id);
   }
