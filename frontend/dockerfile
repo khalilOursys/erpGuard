@@ -2,18 +2,30 @@
 FROM node:18-alpine AS builder
 
 WORKDIR /usr/src/app
+
 COPY package*.json ./
 RUN npm ci
+
+# ✅ Copy configs and source
 COPY . .
+
+# Make sure PostCSS and Tailwind configs are available during build
+COPY postcss.config.js tailwind.config.js ./
+
 RUN npm run build
 
 # runtime
 FROM node:18-alpine AS runner
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
+
 COPY --from=builder /usr/src/app/package*.json ./
 COPY --from=builder /usr/src/app/.next ./.next
 COPY --from=builder /usr/src/app/public ./public
+COPY --from=builder /usr/src/app/tailwind.config.js ./
+COPY --from=builder /usr/src/app/postcss.config.js ./   
+
 RUN npm ci --production
+
 EXPOSE 3000
 CMD ["npx", "next", "start", "-p", "3000"]

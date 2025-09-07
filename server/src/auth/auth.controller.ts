@@ -1,13 +1,24 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
+import { IsNotEmpty, IsString } from 'class-validator';
+
+class LoginDto {
+  @IsNotEmpty()
+  @IsString()
+  identifier: string;
+
+  @IsNotEmpty()
+  @IsString()
+  password: string;
+}
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.identifier, body.password);
+    const { identifier, password } = body;
+    return this.authService.validateAndLogin(identifier, password);
   }
 }
