@@ -1,65 +1,67 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from 'src/prisma.service';
+import { UserService } from 'src/users/user.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private userService: UserService,
+  ) {}
 
-  // validate user by identifier + password
   async validateUser(identifier: string, pass: string) {
-    if (!identifier || !pass) {
-      // invalid request shape
-      throw new BadRequestException('identifier and password are required');
-    }
+    const user = await this.prisma.user.findUnique({
+      where: { identifier },
+    });
+    if (!user) return null;
+    const isMatch = await bcrypt.compare(pass, user.password);
+    if (!isMatch) return null;
 
-    const user = await this.prisma.user.findUnique({ where: { identifier } });
-    if (!user || user.deletedAt) return null;
-    const match = await bcrypt.compare(pass, user.password);
-    if (!match) return null;
-    return user;
+    const { password, ...safe } = user as any;
+    return safe;
   }
 
-  // build effective permissions: rolePermissions + userPermissions (not revoked)
-  async getEffectivePermissions(userId: number, roleName: string) {
-    const userPerms = await this.prisma.userPermission.findMany({
-      where: { userId, revokedAt: null },
-      include: { permission: true },
+  async login(user: any) {
+    // read latest tokenVersion from DB (so we include the current version)
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { tokenVersion: true },
     });
-    const rolePerms = await this.prisma.rolePermission.findMany({
-      where: { roleName },
-      include: { permission: true },
-    });
-    const set = new Set<string>();
-    userPerms.forEach((p) => set.add(p.permission.name));
-    rolePerms.forEach((p) => set.add(p.permission.name));
-    return Array.from(set);
-  }
+    const tokenVersion = dbUser?.tokenVersion ?? 0;
 
-  async login(identifier: string, password: string) {
-    const user = await this.validateUser(identifier, password);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-
-    const perms = await this.getEffectivePermissions(user.id, user.role);
+    const effectivePermissions = await this.userService.getEffectivePermissions(user.id);
 
     const payload = {
       sub: user.id,
       companyId: user.companyId,
       role: user.role,
       identifier: user.identifier,
-      permissions: perms,
+      permissions: effectivePermissions,
+      tokenVersion,
     };
 
+    const token = this.jwtService.sign(payload);
+
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: token,
       user: {
         id: user.id,
         identifier: user.identifier,
         role: user.role,
         companyId: user.companyId,
-        permissions: perms,
+        permissions: effectivePermissions,
       },
     };
+  }
+
+  async validateAndLogin(identifier: string, password: string) {
+    const user = await this.validateUser(identifier, password);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.login(user);
   }
 }

@@ -17,11 +17,6 @@ enum ClientType {
   OTHER
 }
 
-enum GuardType {
-  PERMANENT
-  CONTRACTOR
-}
-
 enum UserRole {
   ADMIN
   COMMERCIAL
@@ -72,8 +67,8 @@ enum BillingStatus {
 }
 
 enum BillingLineType {
-  CHIEF_GUARD
-  GUARD
+  SERVICE
+  PERSONNEL
   CUSTOM
 }
 
@@ -84,18 +79,18 @@ enum RateSource {
 
 /* Core models */
 model Company {
-  id           Int               @id @default(autoincrement())
-  name         String            @unique
+  id           Int        @id @default(autoincrement())
+  name         String     @unique
   address      String?
-  baseCurrency String            @default("USD") // 3-letter ISO code used for storing monetary fields
+  baseCurrency String     @default("USD") // 3-letter ISO code used for storing monetary fields
   contacts     CompanyContact[]
   users        User[]
   clients      Client[]
-  guards       Guard[]
-  billings     Billing[]         // added reverse relation
-  guardQualifications GuardQualification[] // reverse relation
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  personnel    Personnel[]    // personnel for this company
+  services     Service[]      // services offered by this company
+  billings     Billing[] 
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
   @@index([name])
@@ -111,17 +106,17 @@ model CompanyContact {
   @@index([companyId])
 }
 
-/* Clients (the customers of the security company) */
+/* Clients (the customers of the company) */
 model Client {
   id         Int              @id @default(autoincrement())
   name       String
   type       ClientType
   address    String?
   contacts   ClientContact[]
-  company    Company          @relation(fields: [companyId], references: [id]) // security company that owns the client
+  company    Company          @relation(fields: [companyId], references: [id])
   companyId  Int
   contracts  ClientContract[]
-  billings   Billing[]        // reverse relation
+  billings   Billing[]
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   deletedAt  DateTime?
@@ -140,40 +135,67 @@ model ClientContact {
   @@index([clientId])
 }
 
-/* Guards and their contracts */
-model Guard {
-  id             Int                 @id @default(autoincrement())
-  company        Company             @relation(fields: [companyId], references: [id])
+/* Services (e.g., Guard Service, Cooking Service, Cleaning Service) */
+model Service {
+  id          Int        @id @default(autoincrement())
+  company     Company    @relation(fields: [companyId], references: [id])
+  companyId   Int
+  code        String     // optional short code
+  name        String
+  description String?
+  isActive    Boolean    @default(true)
+  // default suggested rates for new contracts (optional)
+  defaultBasePay    Decimal? @db.Decimal(16,2)
+  defaultExtraPay   Decimal? @db.Decimal(16,2)
+  defaultClientPrice Decimal? @db.Decimal(18,2)
+  personnel   Personnel[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([companyId])
+  @@index([name])
+  BillingLine BillingLine[]
+  MissionServiceRequirement MissionServiceRequirement[]
+  ClientContractService ClientContractService[]
+}
+
+/* Personnel (previously Guard) — generic workers assigned to services */
+model Personnel {
+  id             Int                  @id @default(autoincrement())
+  company        Company              @relation(fields: [companyId], references: [id])
   companyId      Int
   firstName      String
   lastName       String
-  email          String              @unique
+  identifier     String?              @unique // optional employee code
+  email          String?              @unique
   phone          String?
-  type           GuardType
-  hireDate       DateTime            @default(now())
-  baseSalary     Decimal             @db.Decimal(16, 2)
-  contracts      GuardContract[]
-  qualifications GuardQualificationRel[]
+  hireDate       DateTime             @default(now())
+  baseSalary     Decimal              @db.Decimal(16, 2)
+  service        Service?             @relation(fields: [serviceId], references: [id])
+  serviceId      Int?
+  contracts      PersonnelContract[]
   assignments    MissionAssignment[]
-  attendances    Attendance[]        // reverse relation - now matches Attendance.guard
+  attendances    Attendance[]
   paymentRecords PaymentRecord[]
-  billingLines   BillingLine[]       // reverse relation - lines that reference this guard
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  billingLines   BillingLine[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   deletedAt      DateTime?
 
-  chiefMissions  Mission[]           @relation("ChiefGuard") // reverse of Mission.chiefGuard
+  // missions where this personnel was the mission's serviceChief (reverse)
+  chiefMissions  Mission[]            @relation("ServiceChief")
 
   @@index([companyId])
   @@index([email])
+  @@index([serviceId])
 }
 
-/* Guard contracts (per-guard employment/engagement docs) */
-model GuardContract {
+/* Personnel contracts (employment/engagement documents) */
+model PersonnelContract {
   id             Int       @id @default(autoincrement())
   contractNumber String    @unique
-  guard          Guard     @relation(fields: [guardId], references: [id])
-  guardId        Int
+  personnel      Personnel @relation(fields: [personnelId], references: [id])
+  personnelId    Int
   startDate      DateTime
   endDate        DateTime
   file           File?     @relation(fields: [fileId], references: [id])
@@ -182,37 +204,52 @@ model GuardContract {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  @@index([guardId])
+  @@index([personnelId])
   @@index([startDate, endDate])
 }
 
 /* Client contracts and extensions (what the client signs with the company) */
 model ClientContract {
-  id               Int                 @id @default(autoincrement())
-  contractNumber   String              @unique
-  client           Client              @relation(fields: [clientId], references: [id])
+  id               Int                         @id @default(autoincrement())
+  contractNumber   String                      @unique
+  client           Client                      @relation(fields: [clientId], references: [id])
   clientId         Int
   startDate        DateTime
   endDate          DateTime
-  file             File?               @relation(fields: [fileId], references: [id])
+  file             File?                       @relation(fields: [fileId], references: [id])
   fileId           Int?
-  // Payment defaults in company's base currency
-  basePay          Decimal             @db.Decimal(16, 2) // what guard gets (base)
-  extraPay         Decimal             @db.Decimal(16, 2) // extra for mission (actual paid)
-  clientPrice      Decimal             @db.Decimal(16, 2) // how much client is charged per guard (base currency)
-  currency         String?             // optional: contract currency; defaults to company.baseCurrency
+  // Per-service pricing for this contract:
+  serviceRates     ClientContractService[]
   extensions       ContractExtension[]
   missions         Mission[]
-  bills            Billing[]           // reverse relation
-  billingLines     BillingLine[]       // reverse relation from BillingLine.contract
-  companyId        Int                 // denormalized owner reference for faster tenant queries
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  bills            Billing[]
+  billingLines     BillingLine[]
+  companyId        Int
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
   deletedAt        DateTime?
 
   @@index([clientId])
   @@index([startDate, endDate])
   @@index([companyId])
+}
+
+/* Per-contract, per-service rates */
+model ClientContractService {
+  id             Int             @id @default(autoincrement())
+  clientContract ClientContract  @relation(fields: [clientContractId], references: [id])
+  clientContractId Int
+  service        Service         @relation(fields: [serviceId], references: [id])
+  serviceId      Int
+
+  // pricing (in company.baseCurrency unless contract.currency set)
+  basePay        Decimal  @db.Decimal(16,2)  // what personnel gets (base)
+  extraPay       Decimal  @db.Decimal(16,2)  // extra when on mission (e.g., overtime)
+  clientPrice    Decimal  @db.Decimal(18,2)  // how much client is charged per personnel unit
+  createdAt      DateTime @default(now())
+
+  @@unique([clientContractId, serviceId])
+  @@index([serviceId])
 }
 
 /* Contract extensions */
@@ -239,14 +276,14 @@ model Mission {
   longitude         Float?
   startDate         DateTime
   endDate           DateTime
-  requiredGuards    Int
-  extraGuardSlots   Int                 @default(0)
-  chiefGuard        Guard?              @relation("ChiefGuard", fields: [chiefGuardId], references: [id])
-  chiefGuardId      Int?
-  manager           User                @relation("ManagedMissions", fields: [managerId], references: [id])
+  requiredPersonnel Int                  // total personnel required (sum across services)
+  extraPersonnelSlots Int               @default(0)
+  serviceChief      Personnel?           @relation("ServiceChief", fields: [serviceChiefId], references: [id])
+  serviceChiefId    Int?
+  manager           User                 @relation("ManagedMissions", fields: [managerId], references: [id])
   managerId         Int
   assignments       MissionAssignment[]
-  requirements      MissionRequirement[]
+  requirements      MissionServiceRequirement[]
   companyId         Int                 // denormalized owner ref
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -261,38 +298,38 @@ model Mission {
   @@index([companyId])
 }
 
-/* Requirements per mission (qualifications/certifications and counts) */
-model MissionRequirement {
-  id              Int                   @id @default(autoincrement())
-  mission         Mission               @relation(fields: [missionId], references: [id])
+/* Requirements per mission: how many personnel by service */
+model MissionServiceRequirement {
+  id              Int        @id @default(autoincrement())
+  mission         Mission    @relation(fields: [missionId], references: [id])
   missionId       Int
-  qualification   GuardQualification    @relation(fields: [qualificationId], references: [id])
-  qualificationId Int
-  requiredCount   Int                   @default(1)
+  service         Service    @relation(fields: [serviceId], references: [id])
+  serviceId       Int
+  requiredCount   Int        @default(1)
 
   @@index([missionId])
-  @@index([qualificationId])
+  @@index([serviceId])
 }
 
-/* Assigning guards to posts in mission */
+/* Assigning personnel to posts in mission */
 model MissionAssignment {
-  id            Int       @id @default(autoincrement())
-  mission       Mission   @relation(fields: [missionId], references: [id])
+  id            Int         @id @default(autoincrement())
+  mission       Mission     @relation(fields: [missionId], references: [id])
   missionId     Int
-  guard         Guard     @relation(fields: [guardId], references: [id])
-  guardId       Int
-  post          String?   // Post1, Post2, etc.
-  role          String?   // e.g., replacement, extra, regular
-  isReplacement Boolean   @default(false)
+  personnel     Personnel   @relation(fields: [personnelId], references: [id])
+  personnelId   Int
+  post          String?     // Post1, Post2, etc.
+  role          String?     // e.g., replacement, extra, regular
+  isReplacement Boolean     @default(false)
   attendances   Attendance[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  billingLines  BillingLine[]   // reverse relation for BillingLine.assignment
-  paymentRecords PaymentRecord[] // reverse relation for PaymentRecord.assignment
+  billingLines  BillingLine[]   
+  paymentRecords PaymentRecord[]
 
   @@index([missionId])
-  @@index([guardId])
+  @@index([personnelId])
 }
 
 /* Attendance per assignment per day (or shift) */
@@ -306,12 +343,12 @@ model Attendance {
   checkOut         DateTime?
   replacementFor   Attendance?        @relation("ReplacementRecord", fields: [replacementForId], references: [id])
   replacementForId Int?
-  replacements     Attendance[]       @relation("ReplacementRecord") // reverse self-relation
+  replacements     Attendance[]       @relation("ReplacementRecord")
   replacementType  ReplacementType?
   notedBy          User?              @relation(fields: [notedById], references: [id])
   notedById        Int?
-  guard            Guard?             @relation(fields: [guardId], references: [id]) // explicitly link attendance to guard
-  guardId          Int?
+  personnel        Personnel?         @relation(fields: [personnelId], references: [id]) 
+  personnelId      Int?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -321,39 +358,41 @@ model Attendance {
 }
 
 /* Users (system users like commercial, manager, accountant) */
-
 model User {
   id               Int                 @id @default(autoincrement())
   company          Company             @relation(fields: [companyId], references: [id])
   companyId        Int
-  // New: unique identifier (login name). Not an email.
   identifier       String              @unique
-  // make email optional (no need for login by email)
-  email            String? 
+  email            String?
   password         String
   displayname      String?
   role             UserRole
   managedMissions  Mission[]           @relation("ManagedMissions")
-  attendances      Attendance[]        // attendances they noted
+  attendances      Attendance[]
   notifications    Notification[]
   audits           AuditLog[]
   paymentRecordsGenerated PaymentRecord[] @relation("PaymentRecordGeneratedBy")
   generatedBillings Billing[]           @relation("BillingGeneratedBy")
-  filesUploaded    File[]               
+  filesUploaded    File[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   deletedAt        DateTime?
 
-  // new relations for permissions bookkeeping
+  // new: token version for immediate invalidation of JWTs when updated
+  tokenVersion     Int                 @default(0)
+
   userPermissions  UserPermission[]
+
   @@index([companyId])
   @@index([role])
   UserPermission UserPermission[] @relation("PermissionGrantedBy")
 }
 
+
+/* Permission models remain same */
 model Permission {
   id          Int       @id @default(autoincrement())
-  name        String    @unique // e.g. "guards.manage", "attendance.edit"
+  name        String    @unique // e.g. "personnel.manage", "attendance.edit"
   description String?
   group       String?   // optional group name
   createdAt   DateTime  @default(now())
@@ -405,7 +444,7 @@ model Notification {
   @@index([channel])
 }
 
-/* Audit logs with structured old/new data for diffs and rollbacks */
+/* Audit logs */
 model AuditLog {
   id            Int      @id @default(autoincrement())
   user          User     @relation(fields: [userId], references: [id])
@@ -421,41 +460,11 @@ model AuditLog {
   @@index([entity, entityId])
 }
 
-/* Qualifications/Credentials (e.g., armed, first aid) */
-model GuardQualification {
-  id          Int                      @id @default(autoincrement())
-  code        String                   @unique
-  name        String
-  description String?
-  company     Company?                 @relation(fields: [companyId], references: [id])
-  companyId   Int?
-  relations   GuardQualificationRel[]
-  missionRequirements MissionRequirement[] // reverse relation for MissionRequirement.qualification
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
-
-  @@index([code])
-}
-
-model GuardQualificationRel {
-  id              Int                @id @default(autoincrement())
-  guard           Guard              @relation(fields: [guardId], references: [id])
-  guardId         Int
-  qualification   GuardQualification @relation(fields: [qualificationId], references: [id])
-  qualificationId Int
-  issuedAt        DateTime?
-  expiresAt       DateTime?
-  createdAt       DateTime           @default(now())
-
-  @@index([guardId])
-  @@index([qualificationId])
-}
-
-/* Payments / payroll records (per guard per period/assignment) */
+/* Payments / payroll records (per personnel per period/assignment) */
 model PaymentRecord {
   id              Int      @id @default(autoincrement())
-  guard           Guard    @relation(fields: [guardId], references: [id])
-  guardId         Int
+  personnel       Personnel @relation(fields: [personnelId], references: [id])
+  personnelId     Int
   mission         Mission? @relation(fields: [missionId], references: [id])
   missionId       Int?
   assignment      MissionAssignment? @relation(fields: [assignmentId], references: [id])
@@ -475,12 +484,12 @@ model PaymentRecord {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  @@index([guardId])
+  @@index([personnelId])
   @@index([missionId])
   @@index([periodStart, periodEnd])
 }
 
-/* File storage metadata (for contracts, attachments) */
+/* File metadata */
 model File {
   id            Int      @id @default(autoincrement())
   url           String
@@ -494,15 +503,14 @@ model File {
   createdAt     DateTime @default(now())
 
   // reverse relations to all places that point to files
-  guardContracts     GuardContract[]
-  clientContracts    ClientContract[]
-  contractExtensions ContractExtension[]
+  personnelContracts     PersonnelContract[]
+  clientContracts        ClientContract[]
+  contractExtensions     ContractExtension[]
 
   @@index([filename])
 }
 
 /* ---- Billing / Invoice system ---- */
-/* Top-level invoice document */
 model Billing {
   id                   Int             @id @default(autoincrement())
   invoiceNumber        String?
@@ -528,7 +536,7 @@ model Billing {
   taxTotalTarget       Decimal?        @db.Decimal(16,2)
   notes                String?
   lines                BillingLine[]
-  payments             Payment[]       // reverse relation for Payment.billing
+  payments             Payment[]
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
@@ -551,10 +559,15 @@ model BillingLine {
   missionId                 Int?
   assignment                MissionAssignment? @relation(fields: [assignmentId], references: [id])
   assignmentId              Int?
-  guard                     Guard?     @relation(fields: [guardId], references: [id])
-  guardId                   Int?
+  personnel                 Personnel? @relation(fields: [personnelId], references: [id])
+  personnelId               Int?
+  service                   Service?   @relation(fields: [serviceId], references: [id])
+  serviceId                 Int?
   contract                  ClientContract? @relation(fields: [contractId], references: [id])
   contractId                Int?
+
+  // For aggregated lines, count how many personnel of that service are billed
+  personnelCount            Int        @default(1)
 
   quantity                  Int        @default(1)
   unitPriceBase             Decimal    @db.Decimal(18, 2) // price per unit in base currency
@@ -580,8 +593,9 @@ model BillingLine {
   @@index([billingId])
   @@index([missionId])
   @@index([assignmentId])
-  @@index([guardId])
+  @@index([personnelId])
   @@index([contractId])
+  @@index([serviceId])
 }
 
 /* Payments linked to invoices (supports multiple payments, refunds) */
