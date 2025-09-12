@@ -186,12 +186,40 @@ async function main() {
         identifier: adminIdentifier,
         displayname: 'Administrator',
         password: hash,
+
         // use string cast to avoid enum import issues during early runs
         role: 'ADMIN' as any,
       },
     });
   }
   console.log('Admin user ensured (identifier=admin)');
+
+  // === NEW: Grant explicit user permissions to admin ===
+  // ensure admin has users.read and users.manage as user-specific permissions as well
+  const adminExplicitPerms = ['users.read', 'users.manage'];
+  for (const permName of adminExplicitPerms) {
+    const perm = await prisma.permission.findUnique({ where: { name: permName } });
+    if (!perm) {
+      console.warn(`Permission "${permName}" not found — skipping assignment to admin.`);
+      continue;
+    }
+    const existingUP = await prisma.userPermission.findFirst({
+      where: { userId: adminUser.id, permissionId: perm.id },
+    });
+    if (!existingUP) {
+      await prisma.userPermission.create({
+        data: {
+          userId: adminUser.id,
+          permissionId: perm.id,
+          grantedById: adminUser.id, // admin grants to themself in seed
+        },
+      });
+      console.log(`Granted permission "${permName}" to admin (userId=${adminUser.id}).`);
+    } else {
+      console.log(`Admin already has permission "${permName}".`);
+    }
+  }
+  // === end admin explicit perms ===
 
   // 7) Client & Contract (client.type is required)
   const clientName = 'ACME Factory';

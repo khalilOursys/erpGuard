@@ -21,11 +21,17 @@ export class PermissionsGuard implements CanActivate {
     ]) ?? [];
 
     // if neither present, allow
-    if ((requiredAll.length === 0) && (requiredAny.length === 0)) return true;
+    if (requiredAll.length === 0 && requiredAny.length === 0) return true;
 
     const req = ctx.switchToHttp().getRequest();
     const user = req.user;
+    console.log('PermissionsGuard - req.user:', user); // Debug req.user
     const userPerms: string[] = user?.permissions ?? [];
+
+    // Log the required and user permissions for debugging
+    console.log('PermissionsGuard - Required All:', requiredAll);
+    console.log('PermissionsGuard - Required Any:', requiredAny);
+    console.log('PermissionsGuard - User Permissions:', userPerms);
 
     // check any-of semantics first (if provided)
     if (requiredAny.length > 0) {
@@ -36,7 +42,7 @@ export class PermissionsGuard implements CanActivate {
       const msg = `Missing at least one of permissions (any-of): ${requiredAny.join(', ')}`;
       this.logger.warn(`Permission denied: user=${user?.id ?? 'anon'} path=${req.url} missingAny=[${missingAny.join(', ')}]`);
       throw new ForbiddenException({
-        onmessage,
+        message: msg,
         missingPermissions: missingAny,
         requiredPermissionsAny: requiredAny,
       });

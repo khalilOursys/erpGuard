@@ -1,4 +1,3 @@
-// src/users/user.controller.ts
 import {
   Controller,
   Post,
@@ -33,11 +32,11 @@ export class UserController {
     return this.userService.create(dto, actorId);
   }
 
-  // list users with filters: pagination, search, sort, deletedOnly, role, permission
   @Permissions('users.read')
   @Get()
   async findAll(@Req() req: any, @Query() query: QueryUsersDto) {
-    const companyId = req.user.companyId;
+    console.log('UserController - req.user:', req.user); // Debug req.user
+    const companyId = req.user.companyId; // Dynamic companyId
     const result = await this.userService.findAll(companyId, {
       page: query.page,
       pageSize: query.pageSize,
@@ -48,6 +47,7 @@ export class UserController {
       role: query.role,
       permission: query.permission,
     });
+    console.log('UserController - findAll result:', result); // Debug result
     return result;
   }
 
@@ -59,12 +59,15 @@ export class UserController {
 
   @Permissions('users.manage')
   @Put(':id')
-  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto, @Req() req: any) {
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+    @Req() req: any,
+  ) {
     const actor = req.user?.id;
     return this.userService.update(id, dto, actor);
   }
 
-  // Soft delete
   @Permissions('users.manage')
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
@@ -72,7 +75,6 @@ export class UserController {
     return this.userService.remove(id, actor);
   }
 
-  // Restore soft-deleted user
   @Permissions('users.manage')
   @Post(':id/restore')
   async restore(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
@@ -82,14 +84,31 @@ export class UserController {
 
   @Permissions('users.manage')
   @Post(':id/permissions')
-  async grantPermissions(@Param('id', ParseIntPipe) id: number, @Body() dto: AssignPermissionsDto, @Req() req: any) {
+  async grantPermissions(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignPermissionsDto,
+    @Req() req: any,
+  ) {
     const actor = req.user?.id;
     return this.userService.grantPermissions(id, dto.permissions, actor);
   }
 
   @Permissions('users.manage')
   @Delete(':id/permissions/:permissionName')
-  async revokePermission(@Param('id', ParseIntPipe) id: number, @Param('permissionName') permissionName: string) {
+  async revokePermission(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('permissionName') permissionName: string,
+  ) {
     return this.userService.revokePermission(id, permissionName);
+  }
+  @Permissions('users.manage')
+  @Get(':id/permissions')
+  async getPermissions(@Param('id', ParseIntPipe) id: number) {
+    return this.userService.getEffectivePermissions(id);
+  }
+  @Permissions('users.read') // Restrict to users with read access
+  @Get('permissions/all')
+  async getAllPermissions() {
+    return this.userService.getAllPermissions();
   }
 }

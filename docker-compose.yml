@@ -35,21 +35,21 @@ services:
       - "3001:3001"
     depends_on:
       - db
-    volumes:
-      # mount source only if you actually want it; for prod build remove this
-      - ./server:/usr/src/app:cached
     command: ["/usr/src/app/entrypoint.sh"]
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev  # Use Dockerfile.prod for production
     ports:
       - "3000:3000"
-    depends_on:
-      - server
     volumes:
-      - ./frontend:/usr/src/app:cached
+      - ./frontend:/app
+      - /app/node_modules  # Persist node_modules
+    environment:
+      - NODE_ENV=development  # Or production
+    depends_on:
+      - server  # If frontend needs backend API
 
 volumes:
   db_data:

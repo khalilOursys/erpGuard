@@ -1,4 +1,3 @@
-// src/users/user.service.ts
 import { Injectable, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from 'src/prisma.service';
@@ -76,130 +75,69 @@ export class UserService {
    * - permission: permission name (returns users who have that permission via userPermissions)
    * - sorting, pagination
    */
-  async findAll(companyId: number, options: {
-    page?: number;
-    pageSize?: number;
-    search?: string;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
-    deletedOnly?: boolean;
-    role?: UserRole | string;
-    permission?: string;
-  }) {
-    const page = options.page && options.page > 0 ? options.page : 1;
-    const pageSize = options.pageSize && options.pageSize > 0 ? Math.min(options.pageSize, 200) : 25;
-    const skip = (page - 1) * pageSize;
-    const take = pageSize;
+async findAll(companyId: number, options: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  deletedOnly?: boolean;
+  role?: string;
+  permission?: string;
+} = {}) {
+  const {
+    page = 1,
+    pageSize = 25,
+    search = '',
+    sortBy = 'displayname',
+    sortOrder = 'asc',
+    role,
+    permission,
+  } = options;
 
-    // Build where clause
-    const where: any = { companyId };
+  const where: any = { companyId };
+  if (search) {
+    where.OR = [
+      { displayname: { contains: search, mode: 'insensitive' } },
+      { identifier: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  if (role) {
+    where.role = role;
+  }
+  if (permission) {
+    where.userPermissions = { some: { permission: { name: permission } } };
+  }
+  const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
+  if (deletedOnly === true) {
+    where.isDeleted = true;
+  } else {
+    where.isDeleted = false;
+  }
+  console.log('findAll - where clause:', where); // Temporary debug
 
-    // deletedOnly true => only deleted; otherwise only non-deleted
-    if (options.deletedOnly) {
-      where.deletedAt = { not: null };
-    } else {
-      where.deletedAt = null;
-    }
-
-    if (options.role) {
-      where.role = options.role as UserRole;
-    }
-
-    if (options.search && options.search.trim().length > 0) {
-      const q = options.search.trim();
-      where.OR = [
-        { identifier: { contains: q, mode: 'insensitive' } },
-        { displayname: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-
-    // If permission filter specified, we'll use relation filter
-    const permissionFilter = options.permission?.trim();
-
-    // Build orderBy safely
-    const allowedSortFields = ['displayname', 'identifier', 'email', 'createdAt', 'updatedAt', 'role'];
-    const rawSortBy = (options.sortBy ?? 'displayname') as string;
-    const sortBy = allowedSortFields.includes(rawSortBy) ? rawSortBy : 'displayname';
-    const sortOrder = options.sortOrder === 'desc' ? 'desc' : 'asc';
-
-    // Build orderBy object as Record<string, any> to satisfy TS
-    const orderBy: Record<string, any> = {};
-    orderBy[sortBy] = sortOrder;
-
-    // total count (if permissionFilter used, counting requires relation condition)
-    let total: number;
-    if (permissionFilter) {
-      total = await this.prisma.user.count({
-        where: {
-          ...where,
-          userPermissions: {
-            some: {
-              permission: { name: permissionFilter },
-            },
-          },
-        },
-      });
-    } else {
-      total = await this.prisma.user.count({ where });
-    }
-
-    // Pull data
-    const users = await this.prisma.user.findMany({
-      where: permissionFilter
-        ? {
-            ...where,
-            userPermissions: {
-              some: {
-                permission: { name: permissionFilter },
-              },
-            },
-          }
-        : where,
-      skip,
-      take,
-      orderBy: orderBy as any,
-      select: {
-        id: true,
-        identifier: true,
-        displayname: true,
-        email: true,
-        role: true,
-        companyId: true,
-        createdAt: true,
-        updatedAt: true,
-        deletedAt: true,
-        userPermissions: {
-          select: {
-            permission: {
-              select: { name: true },
-            },
-          },
+  const total = await this.prisma.user.count({ where });
+  const data = await this.prisma.user.findMany({
+    where,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    orderBy: { [sortBy]: sortOrder },
+    include: {
+      userPermissions: {
+        include: {
+          permission: { select: { name: true } },
         },
       },
-    });
+    },
+  }).then(users =>
+    users.map(user => ({
+      ...user,
+      permissions: user.userPermissions.map(p => p.permission.name),
+    }))
+  );
 
-    const mapped = users.map((u: any) => ({
-      id: u.id,
-      identifier: u.identifier,
-      displayname: u.displayname,
-      email: u.email,
-      role: u.role,
-      companyId: u.companyId,
-      createdAt: u.createdAt,
-      updatedAt: u.updatedAt,
-      deletedAt: u.deletedAt,
-      permissions: (u.userPermissions || []).map((up: any) => up.permission.name),
-    }));
-
-    return {
-      total,
-      page,
-      pageSize: take,
-      data: mapped,
-    };
-  }
-
+  return { total, page, pageSize, data };
+}
   // findOne returns safe user
   async findOne(id: number) {
     const user = await this.prisma.user.findUnique({
@@ -213,7 +151,7 @@ export class UserService {
         companyId: true,
         createdAt: true,
         updatedAt: true,
-        deletedAt: true,
+        isDeleted: true,
         userPermissions: {
           select: {
             permission: { select: { name: true } },
@@ -233,14 +171,14 @@ export class UserService {
       companyId: user.companyId,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      deletedAt: user.deletedAt,
+      isDeleted: user.isDeleted,
       permissions: (user.userPermissions || []).map((up: any) => up.permission.name),
     };
   }
 
   async update(id: number, dto: any, actorUserId?: number) {
     const user = await this.prisma.user.findUnique({ where: { id } });
-    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+    if (!user || user.isDeleted) throw new NotFoundException('User not found');
 
     if (dto.identifier && dto.identifier !== user.identifier) {
       const exists = await this.prisma.user.findUnique({ where: { identifier: dto.identifier } });
@@ -261,52 +199,51 @@ export class UserService {
     return updated;
   }
 
-  // Soft delete (idempotent). Also increments tokenVersion to invalidate tokens.
+  // Soft delete (idempotent). Sets isDeleted to true and increments tokenVersion.
   async remove(id: number, actorUserId?: number) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.deletedAt) {
+    if (user.isDeleted) {
       return {
         id: user.id,
         identifier: user.identifier,
-        deletedAt: user.deletedAt,
+        isDeleted: user.isDeleted,
       };
     }
 
-    const now = new Date();
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
-        deletedAt: now,
+        isDeleted: true,
         tokenVersion: { increment: 1 },
       },
-      select: { id: true, identifier: true, deletedAt: true },
+      select: { id: true, identifier: true, isDeleted: true },
     });
 
     return updated;
   }
 
-  // Restore soft-deleted user. increments tokenVersion to force re-login.
+  // Restore soft-deleted user. Sets isDeleted to false and increments tokenVersion.
   async restore(id: number, actorUserId?: number) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
-    if (!user.deletedAt) {
+    if (!user.isDeleted) {
       return {
         id: user.id,
         identifier: user.identifier,
-        deletedAt: user.deletedAt,
+        isDeleted: user.isDeleted,
       };
     }
 
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
-        deletedAt: null,
+        isDeleted: false,
         tokenVersion: { increment: 1 },
       },
-      select: { id: true, identifier: true, deletedAt: true },
+      select: { id: true, identifier: true, isDeleted: true },
     });
 
     return updated;
@@ -389,5 +326,11 @@ export class UserService {
     userPerms.forEach((p) => set.add(p.permission.name));
     roleMap.forEach((r) => set.add(r.permission.name));
     return Array.from(set);
+  }
+  async getAllPermissions() {
+    const permissions = await this.prisma.permission.findMany({
+      select: { name: true },
+    });
+    return permissions.map(p => p.name);
   }
 }

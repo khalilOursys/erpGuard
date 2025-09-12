@@ -92,7 +92,7 @@ model Company {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
-
+  isDeleted        Boolean             @default(false)
   @@index([name])
 }
 
@@ -120,7 +120,7 @@ model Client {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   deletedAt  DateTime?
-
+  isDeleted        Boolean             @default(false)
   @@index([companyId])
   @@index([name])
 }
@@ -181,7 +181,7 @@ model Personnel {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   deletedAt      DateTime?
-
+  isDeleted        Boolean             @default(false)
   // missions where this personnel was the mission's serviceChief (reverse)
   chiefMissions  Mission[]            @relation("ServiceChief")
 
@@ -203,7 +203,7 @@ model PersonnelContract {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
-
+  isDeleted        Boolean             @default(false)
   @@index([personnelId])
   @@index([startDate, endDate])
 }
@@ -228,7 +228,7 @@ model ClientContract {
   createdAt        DateTime                    @default(now())
   updatedAt        DateTime                    @updatedAt
   deletedAt        DateTime?
-
+  isDeleted        Boolean                     @default(false)
   @@index([clientId])
   @@index([startDate, endDate])
   @@index([companyId])
@@ -288,7 +288,7 @@ model Mission {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   deletedAt         DateTime?
-
+  isDeleted         Boolean             @default(false)
   billingLines      BillingLine[]       // reverse relation for BillingLine.mission
   paymentRecords    PaymentRecord[]     // reverse relation for PaymentRecord.mission
 
@@ -374,9 +374,11 @@ model User {
   paymentRecordsGenerated PaymentRecord[] @relation("PaymentRecordGeneratedBy")
   generatedBillings Billing[]           @relation("BillingGeneratedBy")
   filesUploaded    File[]
+  isDeleted        Boolean             @default(false)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   deletedAt        DateTime?
+
 
   // new: token version for immediate invalidation of JWTs when updated
   tokenVersion     Int                 @default(0)
@@ -439,6 +441,7 @@ model Notification {
   read       Boolean             @default(false)
   createdAt  DateTime            @default(now())
   deletedAt  DateTime?
+  isDeleted  Boolean             @default(false)
 
   @@index([userId])
   @@index([channel])
