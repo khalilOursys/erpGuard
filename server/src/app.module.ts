@@ -9,6 +9,10 @@ import { ClientModule } from './client/client.module';
 import { AppService } from './app.service';
 import { APP_FILTER } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { CitiesModule } from './cities/cities.module';
+import { PersonnelModule } from './personnel/personnel.module';
+import { ServiceModule } from './service/service.module';
+import { MissionsModule } from './missions/missions.module';
 
 @Module({
   imports: [
@@ -17,8 +21,16 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     UserModule,
     CompanyModule,
     ClientModule,
+    CitiesModule,
+    PersonnelModule,
+    ServiceModule,
+    MissionsModule,
   ],
-  providers: [AppService, PrismaService,{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
+  providers: [
+    AppService,
+    PrismaService,
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+  ],
   controllers: [AppController],
 })
 export class AppModule {}

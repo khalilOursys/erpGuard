@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -14,7 +15,28 @@ export class ClientService {
   constructor(private prisma: PrismaService) {}
 
   async create(createClientDto: CreateClientDto) {
-    const { contacts, ...clientData } = createClientDto;
+    const { contacts, locations, ...clientData } = createClientDto;
+
+    // Validate all city IDs exist
+    if (locations && locations.length > 0) {
+      const cityIds = locations.map((loc) => loc.cityId);
+      const existingCities = await this.prisma.city.findMany({
+        where: { id: { in: cityIds } },
+        select: { id: true },
+      });
+
+      const existingCityIds = existingCities.map((city) => city.id);
+      const missingCityIds = cityIds.filter(
+        (id) => !existingCityIds.includes(id),
+      );
+
+      if (missingCityIds.length > 0) {
+        throw new NotFoundException(
+          `Cities with IDs ${missingCityIds.join(', ')} not found`,
+        );
+      }
+    }
+    console.log(clientData);
 
     return this.prisma.client.create({
       data: {
@@ -27,25 +49,44 @@ export class ClientService {
               })),
             }
           : undefined,
+        locations: locations
+          ? {
+              create: locations.map((location) => ({
+                address: location.address,
+                city: { connect: { id: location.cityId } },
+              })),
+            }
+          : undefined,
       },
-      include: { contacts: true },
+      include: {
+        contacts: true,
+        locations: {
+          include: {
+            city: true,
+          },
+        },
+      },
     });
   }
 
   async findAll(companyId: number, page: number = 0, limit: number = 10) {
     const skip = page * limit;
 
-    // Build where clause
     const where: any = { deletedAt: null };
     if (companyId) where.companyId = companyId;
 
-    const [users, total] = await Promise.all([
+    const [clients, total] = await Promise.all([
       this.prisma.client.findMany({
         where,
         skip,
         take: limit,
         include: {
           contacts: true,
+          locations: {
+            include: {
+              city: true,
+            },
+          },
           contracts: true,
           company: true,
           _count: {
@@ -53,6 +94,7 @@ export class ClientService {
               contracts: {
                 where: { deletedAt: null },
               },
+              locations: true,
             },
           },
         },
@@ -62,7 +104,7 @@ export class ClientService {
     ]);
 
     return {
-      data: users,
+      data: clients,
       meta: {
         page,
         limit,
@@ -77,6 +119,11 @@ export class ClientService {
       where: { id },
       include: {
         contacts: true,
+        locations: {
+          include: {
+            city: true,
+          },
+        },
         contracts: {
           where: { deletedAt: null },
           orderBy: { startDate: 'desc' },
@@ -95,18 +142,35 @@ export class ClientService {
   }
 
   async update(id: number, updateClientDto: UpdateClientDto) {
-    // Handle contacts update properly
-    const { contacts, ...clientData } = updateClientDto;
+    const { contacts, locations, ...clientData } = updateClientDto;
+
+    // Validate city IDs if locations are provided
+    if (locations && locations.length > 0) {
+      const cityIds = locations.map((loc) => loc.cityId);
+      const existingCities = await this.prisma.city.findMany({
+        where: { id: { in: cityIds } },
+        select: { id: true },
+      });
+
+      const existingCityIds = existingCities.map((city) => city.id);
+      const missingCityIds = cityIds.filter(
+        (id) => !existingCityIds.includes(id),
+      );
+
+      if (missingCityIds.length > 0) {
+        throw new NotFoundException(
+          `Cities with IDs ${missingCityIds.join(', ')} not found`,
+        );
+      }
+    }
 
     const updateData: any = { ...clientData };
 
     if (contacts !== undefined) {
-      // First delete existing contacts
       await this.prisma.clientContact.deleteMany({
         where: { clientId: id },
       });
 
-      // Then create new ones if provided
       if (contacts && contacts.length > 0) {
         updateData.contacts = {
           create: contacts.map((contact) => ({
@@ -117,10 +181,32 @@ export class ClientService {
       }
     }
 
+    if (locations !== undefined) {
+      await this.prisma.location.deleteMany({
+        where: { clientId: id },
+      });
+
+      if (locations && locations.length > 0) {
+        updateData.locations = {
+          create: locations.map((location) => ({
+            address: location.address,
+            city: { connect: { id: location.cityId } },
+          })),
+        };
+      }
+    }
+
     return this.prisma.client.update({
       where: { id },
       data: updateData,
-      include: { contacts: true },
+      include: {
+        contacts: true,
+        locations: {
+          include: {
+            city: true,
+          },
+        },
+      },
     });
   }
 
@@ -206,13 +292,26 @@ export class ClientService {
         ...createContractDto,
         clientId: Number(createContractDto.clientId),
         companyId: Number(createContractDto.companyId),
-        basePay: Number(createContractDto.basePay),
-        extraPay: Number(createContractDto.extraPay),
-        clientPrice: Number(createContractDto.clientPrice),
         startDate: new Date(createContractDto.startDate),
         endDate: new Date(createContractDto.endDate),
       };
 
+      // Check if contract number already exists
+      const existingContract = await tx.clientContract.findFirst({
+        where: {
+          contractNumber: normalizedDto.contractNumber,
+          companyId: normalizedDto.companyId,
+          clientId: normalizedDto.clientId,
+        },
+      });
+
+      if (existingContract) {
+        throw new ConflictException(
+          `Contract number ${normalizedDto.contractNumber} already exists`,
+        );
+      }
+
+      console.log('eeeeee', normalizedDto);
       const contract = await tx.clientContract.create({
         data: normalizedDto,
       });
@@ -267,24 +366,46 @@ export class ClientService {
     });
   }
 
-  async getClientContracts(clientId: number) {
-    return this.prisma.clientContract.findMany({
-      where: {
-        clientId,
-        deletedAt: null,
-      },
-      orderBy: { startDate: 'desc' },
-      include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
+  async getClientContracts(
+    clientId: number,
+    page: number = 0,
+    limit: number = 10,
+  ) {
+    const skip = page * limit;
+
+    // Build where clause
+    const where: any = { deletedAt: null };
+    if (clientId) where.clientId = clientId;
+
+    const [clients, total] = await Promise.all([
+      this.prisma.clientContract.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { startDate: 'desc' },
+        include: {
+          client: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
           },
+          file: true,
         },
-        file: true,
+      }),
+      this.prisma.clientContract.count({ where }),
+    ]);
+
+    return {
+      data: clients,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-    });
+    };
   }
 
   async getContractWithFile(contractId: number) {
@@ -323,6 +444,7 @@ export class ClientService {
       if (!existingContract) {
         throw new Error(`Contract with id ${contractId} not found`);
       }
+
       const normalizedDto: any = {
         ...updateContractDto,
         ...(updateContractDto.clientId && {
@@ -331,15 +453,6 @@ export class ClientService {
         ...(updateContractDto.companyId && {
           companyId: Number(updateContractDto.companyId),
         }),
-        ...(updateContractDto.basePay && {
-          basePay: Number(updateContractDto.basePay),
-        }),
-        ...(updateContractDto.extraPay && {
-          extraPay: Number(updateContractDto.extraPay),
-        }),
-        ...(updateContractDto.clientPrice && {
-          clientPrice: Number(updateContractDto.clientPrice),
-        }),
         ...(updateContractDto.startDate && {
           startDate: new Date(updateContractDto.startDate),
         }),
@@ -347,6 +460,26 @@ export class ClientService {
           endDate: new Date(updateContractDto.endDate),
         }),
       };
+
+      // Check if contract number already exists (excluding current contract)
+      if (
+        updateContractDto.contractNumber &&
+        updateContractDto.contractNumber !== existingContract.contractNumber
+      ) {
+        const contractWithSameNumber = await tx.clientContract.findFirst({
+          where: {
+            contractNumber: updateContractDto.contractNumber,
+            companyId: normalizedDto.companyId || existingContract.companyId,
+            id: { not: contractId }, // Exclude current contract
+          },
+        });
+
+        if (contractWithSameNumber) {
+          throw new ConflictException(
+            `Contract number ${updateContractDto.contractNumber} already exists`,
+          );
+        }
+      }
 
       normalizedDto.fileId = existingContract.fileId;
       if (file) {
@@ -365,10 +498,45 @@ export class ClientService {
       const updatedContract = await tx.clientContract.update({
         where: { id: contractId },
         data: normalizedDto,
-        include: { file: true }, // will auto-include linked file if exists
+        include: { file: true },
       });
 
       return updatedContract;
+    });
+  }
+
+  async removeContract(id: number) {
+    return this.prisma.clientContract.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+      select: {
+        id: true,
+        deletedAt: true,
+        contractNumber: true,
+      },
+    });
+  }
+  async restoreContract(id: number) {
+    // find any user by id (deleted or not)
+    const client = await this.prisma.clientContract.findUnique({
+      where: { id },
+    });
+
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${id} not found`);
+    }
+
+    // restore
+    return this.prisma.clientContract.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        deletedAt: true,
+        contractNumber: true,
+      },
     });
   }
 }

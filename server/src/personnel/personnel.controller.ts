@@ -1,4 +1,3 @@
-// src/client/client.controller.ts
 import {
   Controller,
   Get,
@@ -17,67 +16,75 @@ import {
   Put,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ClientService } from './client.service';
-import { CreateClientDto } from './dto/create-client.dto';
-import { UpdateClientDto } from './dto/update-client.dto';
-import { multerConfig } from '../config/multer.config';
+import { PersonnelService } from './personnel.service';
+import { CreatePersonnelDto } from './dto/create-personnel.dto';
+import { UpdatePersonnelDto } from './dto/update-personnel.dto';
+import { multerConfig } from 'src/config/multer.config';
 
-@Controller('clients') // Changed from 'client' to 'clients' for RESTful plural
-export class ClientController {
-  constructor(private readonly clientService: ClientService) {}
+@Controller('personnels')
+export class PersonnelController {
+  constructor(private readonly personnelService: PersonnelService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createClientDto: CreateClientDto) {
-    return this.clientService.create(createClientDto);
+  create(@Body() createPersonnelDto: CreatePersonnelDto) {
+    return this.personnelService.create(createPersonnelDto);
   }
 
+  //This function fetches paginated data
   @Get()
-  findAll(
+  findPersonnels(
     @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('companyId', ParseIntPipe) companyId: number,
   ) {
-    return this.clientService.findAll(companyId, page, limit);
+    return this.personnelService.findPersonnels(companyId, page, limit);
+  }
+
+  //This function fetches all data without pagination
+  @Get('findAllPersonnels')
+  findAllPersonnels(@Query('companyId', ParseIntPipe) companyId: number) {
+    return this.personnelService.findAllPersonnels(companyId);
   }
 
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.clientService.findOne(id);
+    return this.personnelService.findOne(id);
   }
 
   @Put(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateClientDto: UpdateClientDto,
+    @Body() updatePersonnelDto: UpdatePersonnelDto,
   ) {
-    return this.clientService.update(id, updateClientDto);
+    return this.personnelService.update(id, updatePersonnelDto);
   }
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.clientService.remove(id);
+    return this.personnelService.remove(id);
   }
 
   @Post(':id/restore')
   restore(@Param('id', ParseIntPipe) id: number) {
-    return this.clientService.restore(id);
+    return this.personnelService.restore(id);
   }
+
   // Contract endpoints
   @Get(':id/contracts')
-  getClientContracts(
+  getPersonnelContracts(
     @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.clientService.getClientContracts(id, page, limit);
+    return this.personnelService.getPersonnelContracts(id, page, limit);
   }
 
   @Post(':id/contracts/with-file')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @HttpCode(HttpStatus.CREATED)
   async createContractWithFile(
-    @Param('id', ParseIntPipe) clientId: number,
+    @Param('id', ParseIntPipe) personnelId: number,
     @Body() createContractDto: any,
     @UploadedFile() file: Express.Multer.File,
   ) {
@@ -85,10 +92,10 @@ export class ClientController {
       throw new BadRequestException('File is required');
     }
 
-    return this.clientService.createContractWithFile(
+    return this.personnelService.createContractWithFile(
       {
         ...createContractDto,
-        clientId,
+        personnelId,
       },
       file,
     );
@@ -101,12 +108,13 @@ export class ClientController {
     @Body() updateContractDto: any,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.clientService.updateContractWithFile(
+    return this.personnelService.updateContractWithFile(
       contractId,
       updateContractDto,
       file,
     );
   }
+
   @Post('contracts/:contractId/upload-file')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   async uploadContractFile(
@@ -117,21 +125,21 @@ export class ClientController {
       throw new BadRequestException('File is required');
     }
 
-    return this.clientService.uploadContractFile(contractId, file);
+    return this.personnelService.uploadContractFile(contractId, file);
   }
 
   @Get('contracts/:contractId')
   getContractWithFile(@Param('contractId', ParseIntPipe) contractId: number) {
-    return this.clientService.getContractWithFile(contractId);
+    return this.personnelService.getContractWithFile(contractId);
   }
 
   @Delete('contracts/:id')
   removeContract(@Param('id', ParseIntPipe) id: number) {
-    return this.clientService.removeContract(id);
+    return this.personnelService.removeContract(id);
   }
 
   @Post('contracts/:id/restore')
   restoreContract(@Param('id', ParseIntPipe) id: number) {
-    return this.clientService.restoreContract(id);
+    return this.personnelService.restoreContract(id);
   }
 }

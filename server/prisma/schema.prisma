@@ -113,7 +113,10 @@ model Client {
   type       ClientType
   address    String?
   contacts   ClientContact[]
-  company    Company          @relation(fields: [companyId], references: [id])
+  tax_number String?
+  rib        String?
+  locations  Location[]       // Client has many locations
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   companyId  Int
   contracts  ClientContract[]
   billings   Billing[]
@@ -123,6 +126,38 @@ model Client {
   isDeleted        Boolean             @default(false)
   @@index([companyId])
   @@index([name])
+}
+
+model Location {
+  id        Int      @id @default(autoincrement()) 
+  address   String
+  city      City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  cityId    Int
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  Int
+  missions  Mission[] // Location has many missions
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([clientId])
+  @@index([cityId]) 
+}
+
+model City {
+  id        Int         @id @default(autoincrement())
+  name      String
+  state     String?
+  country   String      @default("Country Name") 
+  locations Location[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  deletedAt DateTime?
+
+  @@unique([name, state, country])
+  @@index([name])
+  @@index([state])
+  @@index([country]) 
 }
 
 model ClientContact {
@@ -151,6 +186,7 @@ model Service {
   personnel   Personnel[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  deletedAt DateTime?
 
   @@index([companyId])
   @@index([name])
@@ -271,9 +307,8 @@ model Mission {
   id                Int                 @id @default(autoincrement())
   contract          ClientContract      @relation(fields: [contractId], references: [id])
   contractId        Int
-  location          String
-  latitude          Float?
-  longitude         Float?
+  location          Location?            @relation(fields: [locationId], references: [id]) // Reference to Location model
+  locationId        Int?
   startDate         DateTime
   endDate           DateTime
   requiredPersonnel Int                  // total personnel required (sum across services)
@@ -306,6 +341,9 @@ model MissionServiceRequirement {
   service         Service    @relation(fields: [serviceId], references: [id])
   serviceId       Int
   requiredCount   Int        @default(1)
+  basePay        Decimal     @default(0) @db.Decimal(16,2)  // what personnel gets (base)
+  extraPay       Decimal     @default(0) @db.Decimal(16,2)  // extra when on mission (e.g., overtime)
+  clientPrice    Decimal     @default(0) @db.Decimal(18,2)  // how much client is charged per personnel unit
 
   @@index([missionId])
   @@index([serviceId])
