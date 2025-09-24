@@ -6,12 +6,16 @@ import {
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { PrismaService } from 'src/prisma.service';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
 
 @Injectable()
 export class ServiceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditService: AuditLogService,
+  ) {}
 
-  async create(createServiceDto: CreateServiceDto) {
+  async create(createServiceDto: CreateServiceDto, actorUserId: number) {
     // Check if service with same name already exists for this company
     const existingService = await this.prisma.service.findFirst({
       where: {
@@ -28,53 +32,71 @@ export class ServiceService {
         `Service with name '${createServiceDto.name}' or code '${createServiceDto.code}' already exists for this company`,
       );
     }
-
-    return this.prisma.service.create({
+    const service = await this.prisma.service.create({
       data: createServiceDto,
     });
+    await this.auditService.createAuditLog({
+      userId: actorUserId,
+      action: 'CREATE',
+      entity: 'Service',
+      entityId: service.id,
+      previousData: service,
+      newData: service,
+    });
+
+    return service;
   }
 
-  async findServices(companyId: number, page: number, limit: number) {
-    const skip = page * limit;
+  /**
+   * Paginated user listing with:
+   * - deletedOnly: boolean (if true => only deleted users; if false => only non-deleted)
+   * - search: free text on identifier/displayname/email
+   * - sorting, pagination
+   */
+  async findServices(
+    companyId: number,
+    options: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+      deletedOnly?: boolean;
+    } = {},
+  ) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      sortBy = 'name',
+      sortOrder = 'asc',
+    } = options;
 
-    const where: any = { deletedAt: null };
-    if (companyId) where.companyId = companyId;
+    const where: any = { companyId };
+    if (search) {
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
+    if (deletedOnly === true) {
+      where.isDeleted = true;
+    } else {
+      where.isDeleted = false;
+    }
+    console.log('findAll - where clause:', where); // Temporary debug
 
-    const [services, total] = await Promise.all([
-      this.prisma.service.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          _count: {
-            select: {
-              personnel: true,
-              BillingLine: true,
-              MissionServiceRequirement: true,
-              ClientContractService: true,
-            },
-          },
-          company: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: { name: 'asc' },
-      }),
-      this.prisma.service.count({ where }),
-    ]);
+    const total = await this.prisma.service.count({ where });
+    const data = await this.prisma.service.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { [sortBy]: sortOrder },
+    });
 
-    return {
-      data: services,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return { total, page, pageSize, data };
   }
 
   async findAllServices(companyId: number) {
@@ -104,8 +126,12 @@ export class ServiceService {
     return service;
   }
 
-  async update(id: number, updateServiceDto: UpdateServiceDto) {
-    await this.findOne(id); // Verify service exists
+  async update(
+    id: number,
+    updateServiceDto: UpdateServiceDto,
+    actorUserId: number,
+  ) {
+    const existingService = await this.findOne(id); // Verify service exists
 
     // If updating name or code, check for duplicates within the same company
     if (updateServiceDto.name || updateServiceDto.code) {
@@ -127,7 +153,7 @@ export class ServiceService {
       }
     }
 
-    return this.prisma.service.update({
+    const updatedService = await this.prisma.service.update({
       where: { id },
       data: updateServiceDto,
       include: {
@@ -139,16 +165,69 @@ export class ServiceService {
         },
       },
     });
+
+    // Audit log
+    await this.auditService.createAuditLog({
+      userId: actorUserId,
+      action: 'UPDATE',
+      entity: 'Service',
+      entityId: id,
+      previousData: existingService,
+      newData: updatedService,
+    });
+
+    return updatedService;
   }
 
-  async remove(id: number) {
-    return this.prisma.service.update({
+  async remove(id: number, actorUserId: number) {
+    const existingService = await this.findOne(id);
+
+    const result = await this.prisma.service.update({
       where: { id },
-      data: { deletedAt: new Date() },
-      select: {
-        id: true,
-        deletedAt: true,
+      data: { deletedAt: new Date(), isDeleted: true },
+    });
+
+    // Audit log
+    await this.auditService.createAuditLog({
+      userId: actorUserId,
+      action: 'DELETE',
+      entity: 'Service',
+      entityId: id,
+      newData: result,
+      previousData: existingService,
+    });
+
+    return result;
+  }
+
+  async restore(id: number, actorUserId: number) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) throw new NotFoundException('Service not found');
+
+    if (!service.isDeleted) {
+      return {
+        id: service.id,
+        isDeleted: service.isDeleted,
+      };
+    }
+
+    const updated = await this.prisma.service.update({
+      where: { id },
+      data: {
+        isDeleted: false,
       },
     });
+
+    // Audit log
+    await this.auditService.createAuditLog({
+      userId: actorUserId,
+      action: 'RESTORE',
+      entity: 'Service',
+      entityId: id,
+      previousData: service,
+      newData: updated,
+    });
+
+    return updated;
   }
 }

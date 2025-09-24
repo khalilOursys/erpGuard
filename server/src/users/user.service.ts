@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from 'src/prisma.service';
 import { UserRole } from '@prisma/client';
@@ -14,10 +19,14 @@ export class UserService {
 
   // Create user
   async create(createUserDto: any, actorUserId?: number) {
-    const existing = await this.prisma.user.findUnique({ where: { identifier: createUserDto.identifier } });
+    const existing = await this.prisma.user.findUnique({
+      where: { identifier: createUserDto.identifier },
+    });
     if (existing) throw new ConflictException('Identifier already in use');
 
-    const company = await this.prisma.company.findUnique({ where: { id: createUserDto.companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: createUserDto.companyId },
+    });
     if (!company) throw new BadRequestException('Company not found');
 
     const hashed = await this.hashPassword(createUserDto.password);
@@ -33,7 +42,13 @@ export class UserService {
           role: createUserDto.role ?? 'COMMERCIAL',
         },
         select: {
-          id: true, identifier: true, companyId: true, role: true, displayname: true, email: true, createdAt: true,
+          id: true,
+          identifier: true,
+          companyId: true,
+          role: true,
+          displayname: true,
+          email: true,
+          createdAt: true,
         },
       });
 
@@ -43,8 +58,12 @@ export class UserService {
         });
 
         if (perms.length !== createUserDto.permissions.length) {
-          const missing = createUserDto.permissions.filter((p: string) => !perms.some((x) => x.name === p));
-          throw new BadRequestException(`Unknown permissions: ${missing.join(', ')}`);
+          const missing = createUserDto.permissions.filter(
+            (p: string) => !perms.some((x) => x.name === p),
+          );
+          throw new BadRequestException(
+            `Unknown permissions: ${missing.join(', ')}`,
+          );
         }
 
         await tx.userPermission.createMany({
@@ -75,69 +94,74 @@ export class UserService {
    * - permission: permission name (returns users who have that permission via userPermissions)
    * - sorting, pagination
    */
-async findAll(companyId: number, options: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-  deletedOnly?: boolean;
-  role?: string;
-  permission?: string;
-} = {}) {
-  const {
-    page = 1,
-    pageSize = 25,
-    search = '',
-    sortBy = 'displayname',
-    sortOrder = 'asc',
-    role,
-    permission,
-  } = options;
+  async findAll(
+    companyId: number,
+    options: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+      deletedOnly?: boolean;
+      role?: string;
+      permission?: string;
+    } = {},
+  ) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      sortBy = 'displayname',
+      sortOrder = 'asc',
+      role,
+      permission,
+    } = options;
 
-  const where: any = { companyId };
-  if (search) {
-    where.OR = [
-      { displayname: { contains: search, mode: 'insensitive' } },
-      { identifier: { contains: search, mode: 'insensitive' } },
-    ];
-  }
-  if (role) {
-    where.role = role;
-  }
-  if (permission) {
-    where.userPermissions = { some: { permission: { name: permission } } };
-  }
-  const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
-  if (deletedOnly === true) {
-    where.isDeleted = true;
-  } else {
-    where.isDeleted = false;
-  }
-  console.log('findAll - where clause:', where); // Temporary debug
+    const where: any = { companyId };
+    if (search) {
+      where.OR = [
+        { displayname: { contains: search, mode: 'insensitive' } },
+        { identifier: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (role) {
+      where.role = role;
+    }
+    if (permission) {
+      where.userPermissions = { some: { permission: { name: permission } } };
+    }
+    const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
+    if (deletedOnly === true) {
+      where.isDeleted = true;
+    } else {
+      where.isDeleted = false;
+    }
+    console.log('findAll - where clause:', where); // Temporary debug
 
-  const total = await this.prisma.user.count({ where });
-  const data = await this.prisma.user.findMany({
-    where,
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    orderBy: { [sortBy]: sortOrder },
-    include: {
-      userPermissions: {
+    const total = await this.prisma.user.count({ where });
+    const data = await this.prisma.user
+      .findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { [sortBy]: sortOrder },
         include: {
-          permission: { select: { name: true } },
+          userPermissions: {
+            include: {
+              permission: { select: { name: true } },
+            },
+          },
         },
-      },
-    },
-  }).then(users =>
-    users.map(user => ({
-      ...user,
-      permissions: user.userPermissions.map(p => p.permission.name),
-    }))
-  );
+      })
+      .then((users) =>
+        users.map((user) => ({
+          ...user,
+          permissions: user.userPermissions.map((p) => p.permission.name),
+        })),
+      );
 
-  return { total, page, pageSize, data };
-}
+    return { total, page, pageSize, data };
+  }
   // findOne returns safe user
   async findOne(id: number) {
     const user = await this.prisma.user.findUnique({
@@ -172,7 +196,9 @@ async findAll(companyId: number, options: {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       isDeleted: user.isDeleted,
-      permissions: (user.userPermissions || []).map((up: any) => up.permission.name),
+      permissions: (user.userPermissions || []).map(
+        (up: any) => up.permission.name,
+      ),
     };
   }
 
@@ -181,7 +207,9 @@ async findAll(companyId: number, options: {
     if (!user || user.isDeleted) throw new NotFoundException('User not found');
 
     if (dto.identifier && dto.identifier !== user.identifier) {
-      const exists = await this.prisma.user.findUnique({ where: { identifier: dto.identifier } });
+      const exists = await this.prisma.user.findUnique({
+        where: { identifier: dto.identifier },
+      });
       if (exists) throw new ConflictException('Identifier already in use');
     }
 
@@ -193,7 +221,14 @@ async findAll(companyId: number, options: {
     const updated = await this.prisma.user.update({
       where: { id },
       data,
-      select: { id: true, identifier: true, displayname: true, email: true, role: true, updatedAt: true },
+      select: {
+        id: true,
+        identifier: true,
+        displayname: true,
+        email: true,
+        role: true,
+        updatedAt: true,
+      },
     });
 
     return updated;
@@ -250,7 +285,11 @@ async findAll(companyId: number, options: {
   }
 
   // Grant permissions and bump tokenVersion
-  async grantPermissions(userId: number, permissionNames: string[], grantedById?: number) {
+  async grantPermissions(
+    userId: number,
+    permissionNames: string[],
+    grantedById?: number,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -259,8 +298,12 @@ async findAll(companyId: number, options: {
     });
 
     if (perms.length !== permissionNames.length) {
-      const missing = permissionNames.filter((p) => !perms.some((x) => x.name === p));
-      throw new BadRequestException(`Unknown permissions: ${missing.join(', ')}`);
+      const missing = permissionNames.filter(
+        (p) => !perms.some((x) => x.name === p),
+      );
+      throw new BadRequestException(
+        `Unknown permissions: ${missing.join(', ')}`,
+      );
     }
 
     const createData = perms.map((p) => ({
@@ -288,7 +331,9 @@ async findAll(companyId: number, options: {
   }
 
   async revokePermission(userId: number, permissionName: string) {
-    const perm = await this.prisma.permission.findUnique({ where: { name: permissionName } });
+    const perm = await this.prisma.permission.findUnique({
+      where: { name: permissionName },
+    });
     if (!perm) throw new BadRequestException('Permission not found');
 
     await this.prisma.userPermission.deleteMany({
@@ -331,6 +376,6 @@ async findAll(companyId: number, options: {
     const permissions = await this.prisma.permission.findMany({
       select: { name: true },
     });
-    return permissions.map(p => p.name);
+    return permissions.map((p) => p.name);
   }
 }

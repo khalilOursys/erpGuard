@@ -13,6 +13,7 @@ import { CitiesModule } from './cities/cities.module';
 import { PersonnelModule } from './personnel/personnel.module';
 import { ServiceModule } from './service/service.module';
 import { MissionsModule } from './missions/missions.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MissionsModule } from './missions/missions.module';
     PersonnelModule,
     ServiceModule,
     MissionsModule,
+    AuditLogModule,
   ],
   providers: [
     AppService,

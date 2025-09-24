@@ -565,6 +565,281 @@ async function main() {
   );
 
   console.log('Seed finished successfully');
+  createStaticAuditLogs(company);
+}
+// Update the createStaticAuditLogs function with proper typing
+async function createStaticAuditLogs(company: any) {
+  interface AuditLogData {
+    action: string;
+    entity: string;
+    entityId: number;
+    previousData: any;
+    newData: any;
+  }
+
+  const staticAuditLogs: AuditLogData[] = [
+    {
+      action: 'CREATE',
+      entity: 'Service',
+      entityId: 1,
+      previousData: {
+        name: 'Guard Service 1',
+        code: 'GUARD',
+        companyId: company.id,
+        description: 'Security service',
+      },
+      newData: {
+        name: 'Guard Service 1',
+        code: 'GUARD',
+        companyId: company.id,
+        description: 'Security service',
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Service',
+      entityId: 2,
+      previousData: {
+        name: 'Cleaning Service',
+        code: 'CLEAN',
+        companyId: company.id,
+        description: 'Cleaning service',
+      },
+      newData: {
+        name: 'Cleaning Service',
+        code: 'CLEAN',
+        companyId: company.id,
+        description: 'Cleaning service',
+      },
+    },
+    {
+      action: 'UPDATE',
+      entity: 'Service',
+      entityId: 1,
+      previousData: {
+        name: 'Guard Service',
+        code: 'GUARD',
+        description: 'Security service',
+      },
+      newData: {
+        name: 'Premium Guard Service',
+        code: 'PGUARD',
+        description: 'Premium security service',
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Personnel',
+      entityId: 1,
+      previousData: {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@example.com',
+        companyId: company.id,
+      },
+      newData: {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@example.com',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Personnel',
+      entityId: 2,
+      previousData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+        companyId: company.id,
+      },
+      newData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'UPDATE',
+      entity: 'Personnel',
+      entityId: 1,
+      previousData: {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@example.com',
+      },
+      newData: {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.updated@example.com',
+      },
+    },
+    {
+      action: 'DELETE',
+      entity: 'Personnel',
+      entityId: 2,
+      previousData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+      },
+      newData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'User',
+      entityId: 1,
+      previousData: {
+        identifier: 'admin',
+        displayname: 'Administrator',
+        companyId: company.id,
+      },
+      newData: {
+        identifier: 'admin',
+        displayname: 'Administrator',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: 1,
+      previousData: { identifier: 'admin', displayname: 'Administrator' },
+      newData: { identifier: 'admin', displayname: 'Super Administrator' },
+    },
+    {
+      action: 'DELETE',
+      entity: 'User',
+      entityId: 2,
+      previousData: { identifier: 'manager', displayname: 'Manager' },
+      newData: null,
+    },
+    {
+      action: 'CREATE',
+      entity: 'Client',
+      entityId: 1,
+      previousData: {
+        name: 'ABC Corporation',
+        type: 'COMPANY',
+        companyId: company.id,
+      },
+      newData: {
+        name: 'ABC Corporation',
+        type: 'COMPANY',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Client',
+      entityId: 2,
+      previousData: { name: 'XYZ Ltd', type: 'COMPANY', companyId: company.id },
+      newData: { name: 'XYZ Ltd', type: 'COMPANY', companyId: company.id },
+    },
+    {
+      action: 'UPDATE',
+      entity: 'Client',
+      entityId: 1,
+      previousData: { name: 'ABC Corporation', type: 'COMPANY' },
+      newData: { name: 'ABC Corp International', type: 'ENTERPRISE' },
+    },
+    {
+      action: 'DELETE',
+      entity: 'Client',
+      entityId: 2,
+      previousData: { name: 'XYZ Ltd', type: 'COMPANY' },
+      newData: { name: 'XYZ Ltd', type: 'COMPANY' },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Mission',
+      entityId: 1,
+      previousData: {
+        name: 'Night Security',
+        status: 'PLANNED',
+        companyId: company.id,
+      },
+      newData: {
+        name: 'Night Security',
+        status: 'PLANNED',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'CREATE',
+      entity: 'Mission',
+      entityId: 2,
+      previousData: {
+        name: 'Office Cleaning',
+        status: 'ACTIVE',
+        companyId: company.id,
+      },
+      newData: {
+        name: 'Office Cleaning',
+        status: 'ACTIVE',
+        companyId: company.id,
+      },
+    },
+    {
+      action: 'UPDATE',
+      entity: 'Mission',
+      entityId: 1,
+      previousData: { name: 'Night Security', status: 'PLANNED' },
+      newData: { name: 'Night Security Patrol', status: 'ACTIVE' },
+    },
+    {
+      action: 'DELETE',
+      entity: 'Mission',
+      entityId: 2,
+      previousData: { name: 'Office Cleaning', status: 'ACTIVE' },
+      newData: { name: 'Office Cleaning', status: 'ACTIVE' },
+    },
+    {
+      action: 'RESTORE',
+      entity: 'Personnel',
+      entityId: 2,
+      previousData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+        companyId: company.id,
+      },
+      newData: {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+        companyId: company.id,
+      },
+    },
+  ];
+
+  console.log('Creating static audit logs...');
+
+  for (let i = 0; i < staticAuditLogs.length; i++) {
+    const logData = staticAuditLogs[i];
+    const timestamp = new Date();
+    timestamp.setDate(timestamp.getDate() - (staticAuditLogs.length - i));
+    const prisma = new PrismaClient();
+    await prisma.auditLog.create({
+      data: {
+        userId: 1,
+        action: logData.action,
+        entity: logData.entity,
+        entityId: logData.entityId,
+        previousData: logData.previousData,
+        newData: logData.newData,
+        timestamp: timestamp,
+      },
+    });
+  }
+
+  console.log(`Created ${staticAuditLogs.length} static audit logs`);
 }
 
 main()

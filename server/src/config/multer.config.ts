@@ -13,7 +13,7 @@ export const multerConfig = {
     },
   }),
   fileFilter: (req, file, callback) => {
-    if (!file.originalname.match(/\.(pdf|doc|docx|jpg|jpeg|png)$/)) {
+    if (!file.originalname.match(/\.(pdf|jpg|jpeg|png)$/)) {
       return callback(
         new Error('Only document and image files are allowed!'),
         false,

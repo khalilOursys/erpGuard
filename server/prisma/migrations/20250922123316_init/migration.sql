@@ -58,6 +58,8 @@ CREATE TABLE "public"."Client" (
     "name" TEXT NOT NULL,
     "type" "public"."ClientType" NOT NULL,
     "address" TEXT,
+    "tax_number" TEXT,
+    "rib" TEXT,
     "companyId" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -65,6 +67,32 @@ CREATE TABLE "public"."Client" (
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Client_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."Location" (
+    "id" SERIAL NOT NULL,
+    "address" TEXT NOT NULL,
+    "cityId" INTEGER NOT NULL,
+    "clientId" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "Location_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."City" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "state" TEXT,
+    "country" TEXT NOT NULL DEFAULT 'Country Name',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "City_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -90,6 +118,8 @@ CREATE TABLE "public"."Service" (
     "defaultClientPrice" DECIMAL(18,2),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "isDeleted" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Service_pkey" PRIMARY KEY ("id")
 );
@@ -126,6 +156,7 @@ CREATE TABLE "public"."PersonnelContract" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
+    "companyId" INTEGER,
 
     CONSTRAINT "PersonnelContract_pkey" PRIMARY KEY ("id")
 );
@@ -176,9 +207,7 @@ CREATE TABLE "public"."ContractExtension" (
 CREATE TABLE "public"."Mission" (
     "id" SERIAL NOT NULL,
     "contractId" INTEGER NOT NULL,
-    "location" TEXT NOT NULL,
-    "latitude" DOUBLE PRECISION,
-    "longitude" DOUBLE PRECISION,
+    "locationId" INTEGER,
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3) NOT NULL,
     "requiredPersonnel" INTEGER NOT NULL,
@@ -200,6 +229,9 @@ CREATE TABLE "public"."MissionServiceRequirement" (
     "missionId" INTEGER NOT NULL,
     "serviceId" INTEGER NOT NULL,
     "requiredCount" INTEGER NOT NULL DEFAULT 1,
+    "basePay" DECIMAL(16,2) NOT NULL DEFAULT 0,
+    "extraPay" DECIMAL(16,2) NOT NULL DEFAULT 0,
+    "clientPrice" DECIMAL(18,2) NOT NULL DEFAULT 0,
 
     CONSTRAINT "MissionServiceRequirement_pkey" PRIMARY KEY ("id")
 );
@@ -443,6 +475,24 @@ CREATE INDEX "Client_companyId_idx" ON "public"."Client"("companyId");
 CREATE INDEX "Client_name_idx" ON "public"."Client"("name");
 
 -- CreateIndex
+CREATE INDEX "Location_clientId_idx" ON "public"."Location"("clientId");
+
+-- CreateIndex
+CREATE INDEX "Location_cityId_idx" ON "public"."Location"("cityId");
+
+-- CreateIndex
+CREATE INDEX "City_name_idx" ON "public"."City"("name");
+
+-- CreateIndex
+CREATE INDEX "City_state_idx" ON "public"."City"("state");
+
+-- CreateIndex
+CREATE INDEX "City_country_idx" ON "public"."City"("country");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "City_name_state_country_key" ON "public"."City"("name", "state", "country");
+
+-- CreateIndex
 CREATE INDEX "ClientContact_clientId_idx" ON "public"."ClientContact"("clientId");
 
 -- CreateIndex
@@ -623,7 +673,13 @@ CREATE INDEX "Payment_billingId_idx" ON "public"."Payment"("billingId");
 ALTER TABLE "public"."CompanyContact" ADD CONSTRAINT "CompanyContact_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Client" ADD CONSTRAINT "Client_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Client" ADD CONSTRAINT "Client_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."Location" ADD CONSTRAINT "Location_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "public"."City"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."Location" ADD CONSTRAINT "Location_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "public"."Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."ClientContact" ADD CONSTRAINT "ClientContact_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "public"."Client"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -663,6 +719,9 @@ ALTER TABLE "public"."ContractExtension" ADD CONSTRAINT "ContractExtension_fileI
 
 -- AddForeignKey
 ALTER TABLE "public"."Mission" ADD CONSTRAINT "Mission_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "public"."ClientContract"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."Mission" ADD CONSTRAINT "Mission_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "public"."Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Mission" ADD CONSTRAINT "Mission_serviceChiefId_fkey" FOREIGN KEY ("serviceChiefId") REFERENCES "public"."Personnel"("id") ON DELETE SET NULL ON UPDATE CASCADE;
