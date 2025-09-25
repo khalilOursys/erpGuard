@@ -52,6 +52,26 @@ export class UserService {
         },
       });
 
+      let shouldBumpToken = false;
+
+      // Automatically grant permissions from the selected role (from rolePermission table)
+      const rolePerms = await tx.rolePermission.findMany({
+        where: { roleName: user.role },
+      });
+
+      if (rolePerms.length > 0) {
+        await tx.userPermission.createMany({
+          data: rolePerms.map((rp) => ({
+            userId: user.id,
+            permissionId: rp.permissionId,
+            grantedById: actorUserId ?? null,
+          })),
+          skipDuplicates: true,
+        });
+        shouldBumpToken = true;
+      }
+
+      // Grant any additional custom permissions if provided in the DTO
       if (createUserDto.permissions && createUserDto.permissions.length > 0) {
         const perms = await tx.permission.findMany({
           where: { name: { in: createUserDto.permissions } },
@@ -74,8 +94,11 @@ export class UserService {
           })),
           skipDuplicates: true,
         });
+        shouldBumpToken = true;
+      }
 
-        // defensive tokenVersion bump
+      // Defensive tokenVersion bump if any permissions were granted
+      if (shouldBumpToken) {
         await tx.user.update({
           where: { id: user.id },
           data: { tokenVersion: { increment: 1 } },
@@ -218,20 +241,69 @@ export class UserService {
       data.password = await this.hashPassword(dto.password);
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        identifier: true,
-        displayname: true,
-        email: true,
-        role: true,
-        updatedAt: true,
-      },
-    });
+    const oldRole = user.role;
+    const newRole = dto.role ?? oldRole; // If no role in dto, keep old
 
-    return updated;
+    return this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id },
+        data,
+        select: { id: true, identifier: true, displayname: true, email: true, role: true, updatedAt: true },
+      });
+
+      let shouldBumpToken = false;
+
+      // If role changed, automatically grant permissions from the new role
+      if (newRole !== oldRole) {
+        const newRolePerms = await tx.rolePermission.findMany({
+          where: { roleName: newRole },
+        });
+
+        if (newRolePerms.length > 0) {
+          await tx.userPermission.createMany({
+            data: newRolePerms.map((rp) => ({
+              userId: id,
+              permissionId: rp.permissionId,
+              grantedById: actorUserId ?? null,
+            })),
+            skipDuplicates: true,
+          });
+          shouldBumpToken = true;
+        }
+      }
+
+      // Grant any additional custom permissions if provided in the DTO
+      if (dto.permissions && dto.permissions.length > 0) {
+        const perms = await tx.permission.findMany({
+          where: { name: { in: dto.permissions } },
+        });
+
+        if (perms.length !== dto.permissions.length) {
+          const missing = dto.permissions.filter((p: string) => !perms.some((x) => x.name === p));
+          throw new BadRequestException(`Unknown permissions: ${missing.join(', ')}`);
+        }
+
+        await tx.userPermission.createMany({
+          data: perms.map((p) => ({
+            userId: id,
+            permissionId: p.id,
+            grantedById: actorUserId ?? null,
+          })),
+          skipDuplicates: true,
+        });
+        shouldBumpToken = true;
+      }
+
+      // Defensive tokenVersion bump if any permissions were granted or role changed
+      if (shouldBumpToken) {
+        await tx.user.update({
+          where: { id },
+          data: { tokenVersion: { increment: 1 } },
+        });
+      }
+
+      return updatedUser;
+    });
   }
 
   // Soft delete (idempotent). Sets isDeleted to true and increments tokenVersion.

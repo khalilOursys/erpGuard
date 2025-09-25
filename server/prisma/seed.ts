@@ -1,4 +1,4 @@
-// backend/prisma/seed.ts
+// prisma/seed.ts
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -9,13 +9,14 @@ async function main() {
 
   // 1) Company
   const companyName = 'Default Company';
-  let company = await prisma.company.findUnique({
-    where: { name: companyName },
-  });
+  let company = await prisma.company.findUnique({ where: { name: companyName } });
   if (!company) {
     company = await prisma.company.create({
       data: { name: companyName, baseCurrency: 'USD' },
     });
+    console.log('Created company:', companyName);
+  } else {
+    console.log('Company exists:', companyName);
   }
 
   // 2) Permissions (canonical set)
@@ -33,50 +34,61 @@ async function main() {
     { name: 'billing.read', description: 'View billing/invoices' },
     { name: 'billing.generate', description: 'Generate invoices' },
     { name: 'company.manage', description: 'Company-wide admin' },
-    { name: 'company.read', description: 'Company-wide admin reading' },
+    { name: 'company.read', description: 'Company-wide read' },
     { name: 'client.read', description: 'View clients' },
     { name: 'client.manage', description: 'Create/edit clients' },
+    { name: 'locations.manage', description: 'Create/edit locations' },
+    { name: 'locations.read', description: 'view locations' },
+    { name: 'contracts.create', description: 'Create contract' },
+    { name: 'contracts.read', description: 'View contracts' },
+    { name: 'contracts.manage', description: 'Create/edit contracts' },
+    { name: 'contracts.confirm', description: 'confirm contracts' },
+    { name: 'notifications.read', description: 'read notifications' }
   ];
 
+  // Ensure each permission exists
   for (const p of perms) {
-    const existing = await prisma.permission.findUnique({
-      where: { name: p.name },
-    });
+    const existing = await prisma.permission.findUnique({ where: { name: p.name } });
     if (!existing) {
       await prisma.permission.create({ data: p });
     }
   }
   console.log('Permissions ensured');
 
+  // collect all permission names once so ADMIN can get them automatically
+  const allPermNames = perms.map(p => p.name);
+
   // 3) Role -> permission mappings
   const roleMap: Record<string, string[]> = {
-    ADMIN: [
-      'company.manage',
-      'billing.generate',
-      'billing.read',
-      'services.manage',
-      'personnel.manage',
-      'missions.manage',
-      'attendance.edit',
-      'users.manage',
-      'users.read',
-    ],
+    // ADMIN now uses all permissions automatically
+    ADMIN: allPermNames,
     MANAGER: [
       'missions.manage',
       'attendance.edit',
       'personnel.read',
       'missions.read',
+      'locations.read',
+      'locations.manage'
     ],
-    ACCOUNTANT: ['billing.read', 'billing.generate', 'attendance.read'],
-    COMMERCIAL: ['services.manage', 'missions.read', 'personnel.read'],
-    GUARD: ['attendance.read', 'missions.read'],
+    ACCOUNTANT: [
+      'billing.read',
+      'billing.generate',
+      'attendance.read',
+      'locations.read',
+      'locations.manage'
+    ],
+    COMMERCIAL: [
+      'services.manage',
+      'missions.read',
+      'personnel.read',
+      'locations.read',
+      'locations.manage'
+    ],
   };
 
   for (const [roleName, permNames] of Object.entries(roleMap)) {
     for (const permName of permNames) {
-      const perm = await prisma.permission.findUnique({
-        where: { name: permName },
-      });
+      const perm = await prisma.permission.findUnique({ where: { name: permName } });
       if (!perm) continue;
       const exists = await prisma.rolePermission.findFirst({
         where: { roleName, permissionId: perm.id },
@@ -90,7 +102,7 @@ async function main() {
   }
   console.log('Role -> permission mappings ensured');
 
-  // 4) Services (ensure required fields name & code present)
+  // 4) Services
   async function ensureService(data: {
     code: string;
     name: string;
@@ -154,9 +166,7 @@ async function main() {
     serviceId?: number;
   }) {
     if (data.email) {
-      const found = await prisma.personnel.findUnique({
-        where: { email: data.email },
-      });
+      const found = await prisma.personnel.findUnique({ where: { email: data.email } });
       if (found) return found;
     }
     return prisma.personnel.create({
@@ -197,12 +207,10 @@ async function main() {
 
   console.log('Personnel ensured');
 
-  // 6) Admin user - create BEFORE missions (so we can use admin.id as managerId)
+  // 6) Admin user
   const adminIdentifier = 'admin';
   const adminPassword = 'adminpass';
-  let adminUser = await prisma.user.findUnique({
-    where: { identifier: adminIdentifier },
-  });
+  let adminUser = await prisma.user.findUnique({ where: { identifier: adminIdentifier } });
   if (!adminUser) {
     const hash = await bcrypt.hash(adminPassword, 10);
     adminUser = await prisma.user.create({
@@ -211,27 +219,21 @@ async function main() {
         identifier: adminIdentifier,
         displayname: 'Administrator',
         password: hash,
-
-        // use string cast to avoid enum import issues during early runs
         role: 'ADMIN' as any,
       },
     });
+    console.log('Admin user created (identifier=admin)');
+  } else {
+    console.log('Admin user exists (identifier=admin)');
   }
-  console.log('Admin user ensured (identifier=admin)');
 
-  // === NEW: Grant explicit user permissions to admin ===
-  // ensure admin has users.read and users.manage as user-specific permissions as well
-  const adminExplicitPerms = ['users.read', 'users.manage'];
+  // Grant explicit user permissions to admin (if not present)
+  // Automatically grant every permission in `perms` to the admin user
+  const adminExplicitPerms = allPermNames;
+
   for (const permName of adminExplicitPerms) {
-    const perm = await prisma.permission.findUnique({
-      where: { name: permName },
-    });
-    if (!perm) {
-      console.warn(
-        `Permission "${permName}" not found — skipping assignment to admin.`,
-      );
-      continue;
-    }
+    const perm = await prisma.permission.findUnique({ where: { name: permName } });
+    if (!perm) continue;
     const existingUP = await prisma.userPermission.findFirst({
       where: { userId: adminUser.id, permissionId: perm.id },
     });
@@ -240,19 +242,14 @@ async function main() {
         data: {
           userId: adminUser.id,
           permissionId: perm.id,
-          grantedById: adminUser.id, // admin grants to themself in seed
+          grantedById: adminUser.id,
         },
       });
-      console.log(
-        `Granted permission "${permName}" to admin (userId=${adminUser.id}).`,
-      );
-    } else {
-      console.log(`Admin already has permission "${permName}".`);
+      console.log(`Granted permission "${permName}" to admin`);
     }
   }
-  // === end admin explicit perms ===
 
-  // 7) Client & Contract (client.type is required)
+  // 7) Client & Contract
   const clientName = 'ACME Factory';
   let client = await prisma.client.findFirst({
     where: { name: clientName, companyId: company.id },
@@ -261,10 +258,13 @@ async function main() {
     client = await prisma.client.create({
       data: {
         name: clientName,
-        type: 'OTHER' as any, // required enum field — use default OTHER for seed
+        type: 'OTHER' as any,
         companyId: company.id,
       },
     });
+    console.log('Client created:', clientName);
+  } else {
+    console.log('Client exists:', clientName);
   }
 
   const existingContract = await prisma.clientContract.findFirst({
@@ -305,23 +305,20 @@ async function main() {
       },
       include: { serviceRates: true },
     });
+    console.log('Client contract created');
   } else {
     contract = existingContract;
+    console.log('Existing contract used');
   }
 
-  console.log('Client + contract ensured');
-
-  // 8) Mission referencing the contract, managerId is adminUser.id
+  // 8) Mission
   const missionStart = new Date();
   missionStart.setDate(missionStart.getDate() - 20);
   const missionEnd = new Date();
   missionEnd.setDate(missionEnd.getDate() - 10);
 
   let mission = await prisma.mission.findFirst({
-    where: {
-      contractId: contract.id,
-      startDate: missionStart,
-    },
+    where: { contractId: contract.id, startDate: missionStart },
   });
 
   if (!mission) {
@@ -343,9 +340,12 @@ async function main() {
       },
       include: { requirements: true },
     });
+    console.log('Mission created');
+  } else {
+    console.log('Mission exists');
   }
 
-  // 9) Assign personnel to mission
+  // 9) Assign personnel
   async function safeAssign(
     personnelId: number,
     missionId: number,
@@ -372,7 +372,7 @@ async function main() {
 
   console.log('Assignments ensured');
 
-  // 10) Create attendance sample records (two days)
+  // 10) Attendance sample
   const attendanceDate1 = new Date(missionStart);
   const attendanceDate2 = new Date(missionStart);
   attendanceDate2.setDate(attendanceDate2.getDate() + 1);
@@ -383,9 +383,7 @@ async function main() {
     personnelId: number,
     status: string,
   ) {
-    const exists = await prisma.attendance.findFirst({
-      where: { assignmentId, date },
-    });
+    const exists = await prisma.attendance.findFirst({ where: { assignmentId, date } });
     if (exists) return exists;
     return prisma.attendance.create({
       data: {
@@ -397,27 +395,15 @@ async function main() {
     });
   }
 
-  const assignments = await prisma.missionAssignment.findMany({
-    where: { missionId: mission.id },
-  });
+  const assignments = await prisma.missionAssignment.findMany({ where: { missionId: mission.id } });
   for (const a of assignments) {
-    await createAttendanceIfMissing(
-      a.id,
-      attendanceDate1,
-      a.personnelId,
-      'PRESENT',
-    );
-    await createAttendanceIfMissing(
-      a.id,
-      attendanceDate2,
-      a.personnelId,
-      'PRESENT',
-    );
+    await createAttendanceIfMissing(a.id, attendanceDate1, a.personnelId, 'PRESENT');
+    await createAttendanceIfMissing(a.id, attendanceDate2, a.personnelId, 'PRESENT');
   }
 
   console.log('Attendance sample records created');
 
-  // 11) Simple billing generation for the mission period
+  // 11) Basic billing generation for the mission period
   const periodStart = mission.startDate;
   const periodEnd = mission.endDate;
 
@@ -433,7 +419,6 @@ async function main() {
     countsByService.set(svcId, (countsByService.get(svcId) || 0) + 1);
   }
 
-  // create billing header
   const invoiceNumber = `INV-${Date.now()}`;
   const billing = await prisma.billing.create({
     data: {
@@ -451,9 +436,7 @@ async function main() {
   });
 
   let totalBase = 0;
-  const contractRates = await prisma.clientContractService.findMany({
-    where: { clientContractId: contract.id },
-  });
+  const contractRates = await prisma.clientContractService.findMany({ where: { clientContractId: contract.id } });
 
   for (const rate of contractRates) {
     const svcId = rate.serviceId;
@@ -465,7 +448,7 @@ async function main() {
     await prisma.billingLine.create({
       data: {
         billingId: billing.id,
-        lineType: 'SERVICE',
+        lineType: 'SERVICE' as any,
         description: `Service: ${svcId}`,
         serviceId: svcId,
         contractId: contract.id,
@@ -479,90 +462,8 @@ async function main() {
     totalBase += lineTotal;
   }
 
-  await prisma.billing.update({
-    where: { id: billing.id },
-    data: { amountBaseCurrency: totalBase as any },
-  });
-  const mauritanianCities = [
-    { name: 'Nouakchott', state: 'Nouakchott-Ouest', country: 'Mauritania' },
-    { name: 'Nouadhibou', state: 'Dakhlet Nouadhibou', country: 'Mauritania' },
-    { name: 'Rosso', state: 'Trarza', country: 'Mauritania' },
-    { name: 'Kaédi', state: 'Gorgol', country: 'Mauritania' },
-    { name: 'Kiffa', state: 'Assaba', country: 'Mauritania' },
-    { name: 'Zouérat', state: 'Tiris Zemmour', country: 'Mauritania' },
-    { name: 'Atar', state: 'Adrar', country: 'Mauritania' },
-    { name: 'Néma', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    {
-      name: 'Aïoun El Atrouss',
-      state: 'Hodh El Gharbi',
-      country: 'Mauritania',
-    },
-    { name: 'Sélibaby', state: 'Guidimaka', country: 'Mauritania' },
-    { name: 'Aleg', state: 'Brakna', country: 'Mauritania' },
-    { name: 'Boghé', state: 'Brakna', country: 'Mauritania' },
-    { name: 'Tidjikja', state: 'Tagant', country: 'Mauritania' },
-    { name: 'Oualata', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    { name: 'Chinguetti', state: 'Adrar', country: 'Mauritania' },
-    { name: 'Ouadane', state: 'Adrar', country: 'Mauritania' },
-    { name: 'Timbedra', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    { name: 'Fréje', state: 'Gorgol', country: 'Mauritania' },
-    { name: 'Barkéol', state: 'Assaba', country: 'Mauritania' },
-    { name: 'Mbout', state: 'Gorgol', country: 'Mauritania' },
-    { name: 'Magta-Lahjar', state: 'Brakna', country: 'Mauritania' },
-    { name: 'Tevragh-Zeina', state: 'Nouakchott-Sud', country: 'Mauritania' },
-    { name: 'Dar Naim', state: 'Nouakchott-Nord', country: 'Mauritania' },
-    { name: 'Toujounine', state: 'Nouakchott-Ouest', country: 'Mauritania' },
-    { name: 'Sebkha', state: 'Nouakchott-Sud', country: 'Mauritania' },
-    { name: 'El Mina', state: 'Nouakchott-Ouest', country: 'Mauritania' },
-    { name: 'Riyad', state: 'Nouakchott-Nord', country: 'Mauritania' },
-    { name: 'Ksar', state: 'Nouakchott-Nord', country: 'Mauritania' },
-    { name: 'Toufil', state: 'Guidimaka', country: 'Mauritania' },
-    { name: 'Bouhdida', state: 'Trarza', country: 'Mauritania' },
-    { name: 'Lexeiba', state: 'Brakna', country: 'Mauritania' },
-    { name: 'Bababé', state: 'Brakna', country: 'Mauritania' },
-    { name: 'Monguel', state: 'Gorgol', country: 'Mauritania' },
-    { name: "M'Bagne", state: 'Gorgol', country: 'Mauritania' },
-    { name: 'Djewol', state: 'Gorgol', country: 'Mauritania' },
-    { name: 'Kankossa', state: 'Assaba', country: 'Mauritania' },
-    { name: 'Guerou', state: 'Assaba', country: 'Mauritania' },
-    { name: 'Bousteila', state: 'Assaba', country: 'Mauritania' },
-    { name: 'Tamchekett', state: 'Hodh El Gharbi', country: 'Mauritania' },
-    { name: 'Tintane', state: 'Hodh El Gharbi', country: 'Mauritania' },
-    { name: 'Ould Yengé', state: 'Hodh El Gharbi', country: 'Mauritania' },
-    {
-      name: "N'Beiket Lahwach",
-      state: 'Hodh Ech Chargui',
-      country: 'Mauritania',
-    },
-    { name: 'Djiguenni', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    { name: 'Bassiknou', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    { name: 'Fassala', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    { name: 'Amourj', state: 'Hodh Ech Chargui', country: 'Mauritania' },
-    {
-      name: 'Boubacar Ben Amer',
-      state: 'Tiris Zemmour',
-      country: 'Mauritania',
-    },
-    { name: 'Fderîck', state: 'Tiris Zemmour', country: 'Mauritania' },
-    { name: 'Bir Moghrein', state: 'Tiris Zemmour', country: 'Mauritania' },
-    { name: 'Choum', state: 'Adrar', country: 'Mauritania' },
-    { name: 'Aoujeft', state: 'Adrar', country: 'Mauritania' },
-  ];
-  for (const data of mauritanianCities) {
-    await prisma.city.create({
-      data: {
-        name: data.name,
-        state: data.state,
-        country: data.country,
-      },
-    });
-  }
-
-  console.log('Adding Mauritanian cities...');
-
-  console.log(
-    `Billing created invoiceNumber=${invoiceNumber} total=${totalBase}`,
-  );
+  await prisma.billing.update({ where: { id: billing.id }, data: { amountBaseCurrency: totalBase as any } });
+  console.log(`Billing created invoiceNumber=${invoiceNumber} total=${totalBase}`);
 
   console.log('Seed finished successfully');
   createStaticAuditLogs(company);

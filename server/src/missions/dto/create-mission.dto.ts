@@ -1,75 +1,38 @@
-import {
-  IsInt,
-  IsString,
-  IsNumber,
-  IsOptional,
-  IsArray,
-  ValidateNested,
-  IsNotEmpty,
-  IsDateString,
-  Min,
-} from 'class-validator';
+import { IsNotEmpty, IsInt, IsDateString, IsOptional, Min, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class MissionServiceRequirementDto {
-  @IsInt()
-  @Min(1)
-  serviceId: number;
-
-  @IsInt()
-  @Min(1)
-  requiredCount: number;
-
-  @IsNumber()
-  @Min(0)
-  basePay: number;
-
-  @IsNumber()
-  @Min(0)
-  extraPay: number;
-
-  @IsNumber()
-  @Min(0)
-  clientPrice: number;
-}
-
 export class CreateMissionDto {
+  @IsNotEmpty()
+  @Type(() => Number)
   @IsInt()
-  @Min(1)
-  contractId: number;
-
-  @IsInt()
-  @IsNumber()
-  locationId?: number;
-
-  @IsDateString()
-  startDate: string;
-
-  @IsDateString()
-  endDate: string;
-
-  @IsInt()
-  @Min(1)
-  requiredPersonnel: number; // Changed from requiredGuards to match your model
+  contractId!: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  siteId?: number;
+
+  @IsNotEmpty()
+  @IsDateString()
+  startDate!: string;
+
+  @IsNotEmpty()
+  @IsDateString()
+  endDate!: string;
+
+  @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
-  extraPersonnelSlots?: number; // Changed from extraGuardSlots to match your model
+  requiredPersonnel?: number;
 
   @IsOptional()
-  @IsInt()
-  serviceChiefId?: number; // Changed from chiefGuardId to match your model
+  @IsString()
+  post?: string;
 
-  @IsInt()
-  managerId: number;
-
+  // manager can be set now or left to default behavior
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => MissionServiceRequirementDto)
-  requirements?: MissionServiceRequirementDto[];
-
+  @Type(() => Number)
   @IsInt()
-  companyId: number;
+  managerId?: number;
 }

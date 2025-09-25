@@ -74,7 +74,7 @@ export default function PermissionsManager({ userId, onSuccess }: PermissionsMan
           <SelectTrigger>
             <SelectValue placeholder="Select permission" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto custom-scrollbar"> {/* Updated with custom-scrollbar */}
             {availablePermissions.map((p) => (
               <SelectItem key={p} value={p} disabled={permissions.includes(p)}>
                 {p}

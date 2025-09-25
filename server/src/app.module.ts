@@ -5,14 +5,15 @@ import { PrismaService } from './prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './users/user.module';
-import { ClientModule } from './client/client.module';
 import { AppService } from './app.service';
 import { APP_FILTER } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { CitiesModule } from './cities/cities.module';
 import { PersonnelModule } from './personnel/personnel.module';
-import { ServiceModule } from './service/service.module';
-import { MissionsModule } from './missions/missions.module';
+import { ClientModule } from './clients/client.module';
+import { LocationsModule } from './locations/locations.module';
+import { ContractModule } from './contracts/contract.module';
+import { NotificationModule } from './notifications/notification.module';
+import { MissionModule } from './missions/mission.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
@@ -22,10 +23,11 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     UserModule,
     CompanyModule,
     ClientModule,
-    CitiesModule,
+    LocationsModule,
+    ContractModule,
     PersonnelModule,
-    ServiceModule,
-    MissionsModule,
+    NotificationModule,
+    MissionModule,
     AuditLogModule,
   ],
   providers: [

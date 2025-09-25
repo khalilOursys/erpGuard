@@ -15,7 +15,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: any) {
-    console.log("JwtStrategy - Payload:", payload); // Debug payload
     const userId = payload.sub;
     if (!userId) throw new UnauthorizedException('Invalid token payload');
 
@@ -37,11 +36,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       where: { userId },
       include: { permission: true },
     }).then((perms) => {
-      console.log("JwtStrategy - Raw Permissions from DB:", perms); // Debug raw DB result
       return perms.map((p) => p.permission.name);
     });
 
-    console.log("JwtStrategy - Resolved Permissions:", permissions); // Debug resolved permissions
     if (!permissions || permissions.length === 0) {
       console.log("JwtStrategy - Warning: No permissions found for userId:", userId); // Debug warning
     }

@@ -31,7 +31,6 @@ enum UserRole {
   COMMERCIAL = "COMMERCIAL",
   MANAGER = "MANAGER",
   ACCOUNTANT = "ACCOUNTANT",
-  GUARD = "GUARD",
 }
 
 // Updated User type
@@ -153,12 +152,9 @@ export default function UsersPage() {
   const handleUpdate = async (userId: number, updatedData: Partial<User>) => {
     try {
       await api.put(`/users/${userId}`, updatedData); // Using PUT as per UserForm
-      toast.success("User updated successfully");
-      fetchUsers(); // Refresh the user list
-      setIsAddOpen(false); // Close the dialog
-      setSelectedUser(null); // Clear selected user
+      toast.success("User updated");
+      fetchUsers();
     } catch (err) {
-      console.error("Error updating user:", err);
       toast.error("Failed to update user");
     }
   };
@@ -226,9 +222,12 @@ export default function UsersPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">Users</h1>
         {hasManagePermission && (
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <Dialog open={isAddOpen} onOpenChange={(open) => {
+            setIsAddOpen(open);
+            if (!open) setSelectedUser(null);
+          }}>
             <DialogTrigger asChild>
-              <Button>Add User</Button>
+              <Button onClick={() => setSelectedUser(null)}>Add User</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <UserForm
@@ -260,7 +259,6 @@ export default function UsersPage() {
               <SelectItem value="COMMERCIAL">Commercial</SelectItem>
               <SelectItem value="MANAGER">Manager</SelectItem>
               <SelectItem value="ACCOUNTANT">Accountant</SelectItem>
-              <SelectItem value="GUARD">Guard</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -270,7 +268,7 @@ export default function UsersPage() {
             <SelectTrigger>
               <SelectValue placeholder="All Permissions" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto custom-scrollbar"> {/* Updated with custom-scrollbar */}
               <SelectItem value="all">All Permissions</SelectItem>
               {availablePermissions.map((perm) => (
                 <SelectItem key={perm} value={perm}>{perm}</SelectItem>
@@ -296,7 +294,10 @@ export default function UsersPage() {
         }}
       />
       {selectedUser && (
-        <Dialog open={isPermissionsOpen} onOpenChange={setIsPermissionsOpen}>
+        <Dialog open={isPermissionsOpen} onOpenChange={(open) => {
+          setIsPermissionsOpen(open);
+          if (!open) setSelectedUser(null);
+        }}>
           <DialogContent className="max-w-lg">
             <PermissionsManager
               userId={selectedUser.id}

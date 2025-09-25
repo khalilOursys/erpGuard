@@ -18,7 +18,6 @@ enum UserRole {
   COMMERCIAL = "COMMERCIAL",
   MANAGER = "MANAGER",
   ACCOUNTANT = "ACCOUNTANT",
-  GUARD = "GUARD",
 }
 
 // Form schema for create/update user
@@ -26,7 +25,7 @@ const userSchema = z.object({
   identifier: z.string().min(1, "Identifier is required"),
   displayname: z.string().optional(),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
-  role: z.enum(["ADMIN", "COMMERCIAL", "MANAGER", "ACCOUNTANT", "GUARD"]),
+  role: z.enum(["ADMIN", "COMMERCIAL", "MANAGER", "ACCOUNTANT"]),
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
   companyId: z.number().optional(), // Optional for edits, required for create
 });
@@ -135,7 +134,6 @@ export default function UserForm({ user, onSuccess }: UserFormProps) {
             <SelectItem value="COMMERCIAL">Commercial</SelectItem>
             <SelectItem value="MANAGER">Manager</SelectItem>
             <SelectItem value="ACCOUNTANT">Accountant</SelectItem>
-            <SelectItem value="GUARD">Guard</SelectItem>
           </SelectContent>
         </Select>
       </div>
