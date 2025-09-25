@@ -32,7 +32,9 @@ export class AuthService {
     });
     const tokenVersion = dbUser?.tokenVersion ?? 0;
 
-    const effectivePermissions = await this.userService.getEffectivePermissions(user.id);
+    const effectivePermissions = await this.userService.getEffectivePermissions(
+      user.id,
+    );
 
     const payload = {
       sub: user.id,

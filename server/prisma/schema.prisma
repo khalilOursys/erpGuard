@@ -186,7 +186,8 @@ model Service {
   personnel   Personnel[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
-  deletedAt DateTime?
+  deletedAt   DateTime?
+  isDeleted   Boolean    @default(false)
 
   @@index([companyId])
   @@index([name])
@@ -239,7 +240,8 @@ model PersonnelContract {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
-  isDeleted        Boolean             @default(false)
+  isDeleted      Boolean             @default(false)
+  companyId      Int?
   @@index([personnelId])
   @@index([startDate, endDate])
 }

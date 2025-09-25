@@ -40,36 +40,51 @@ export class PersonnelService {
     });
   }
   //This function fetches paginated data
-  async findPersonnels(companyId: number, page: number, limit: number) {
-    const skip = page * limit;
-    const [personnel, total] = await Promise.all([
-      this.prisma.personnel.findMany({
-        where: { companyId, deletedAt: null },
-        skip,
-        take: limit,
-        include: {
-          contracts: {
-            where: { deletedAt: null },
-          },
-          company: true,
-          service: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.personnel.count({
-        where: { companyId, deletedAt: null },
-      }),
-    ]);
+  async findPersonnels(
+    companyId: number,
+    options: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+      deletedOnly?: boolean;
+    } = {},
+  ) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      sortBy = 'identifier',
+      sortOrder = 'asc',
+    } = options;
 
-    return {
-      data: personnel,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    const where: any = { companyId };
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { identifier: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
+    if (deletedOnly === true) {
+      where.isDeleted = true;
+    } else {
+      where.isDeleted = false;
+    }
+    console.log('findAll - where clause:', where); // Temporary debug
+
+    const total = await this.prisma.personnel.count({ where });
+    const data = await this.prisma.personnel.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { [sortBy]: sortOrder },
+    });
+
+    return { total, page, pageSize, data };
   }
 
   //This function fetches all data without pagination
@@ -121,66 +136,112 @@ export class PersonnelService {
   }
 
   async remove(id: number) {
-    await this.findOne(id); // Verify personnel exists
+    const personnel = await this.prisma.personnel.findUnique({ where: { id } });
+    if (!personnel) throw new NotFoundException('personnel not found');
 
-    return this.prisma.personnel.update({
+    if (personnel.isDeleted) {
+      return {
+        id: personnel.id,
+        isDeleted: personnel.isDeleted,
+      };
+    }
+
+    const updated = await this.prisma.personnel.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: {
+        isDeleted: true,
+      },
     });
+
+    return updated;
   }
 
   async restore(id: number) {
-    const personnel = await this.prisma.personnel.findUnique({
-      where: { id },
-    });
+    const personnel = await this.prisma.personnel.findUnique({ where: { id } });
+    if (!personnel) throw new NotFoundException('personnel not found');
 
-    if (!personnel) {
-      throw new NotFoundException(`Personnel with ID ${id} not found`);
+    if (!personnel.isDeleted) {
+      return {
+        id: personnel.id,
+        isDeleted: personnel.isDeleted,
+      };
     }
 
-    return this.prisma.personnel.update({
+    const updated = await this.prisma.personnel.update({
       where: { id },
-      data: { deletedAt: null },
-      include: {
-        company: true,
-        service: true,
+      data: {
+        isDeleted: false,
       },
     });
+
+    return updated;
   }
 
   // Contract methods
   async getPersonnelContracts(
     personnelId: number,
-    page: number = 0,
-    limit: number = 10,
+    options: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+      deletedOnly?: boolean;
+      startDate?: Date | string; // Add startDate filter
+      endDate?: Date | string; // Add endDate filter
+    } = {},
   ) {
-    const skip = page * limit;
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      sortBy = 'contractNumber',
+      sortOrder = 'asc',
+      startDate,
+      endDate,
+    } = options;
 
-    const where: any = { deletedAt: null, personnelId };
+    const where: any = { personnelId };
 
-    const [contracts, total] = await Promise.all([
-      this.prisma.personnelContract.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { startDate: 'desc' },
-        include: {
-          personnel: true,
-          file: true,
-        },
-      }),
-      this.prisma.personnelContract.count({ where }),
-    ]);
+    // Search filter
+    if (search) {
+      where.OR = [
+        { contractNumber: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
-    return {
-      data: contracts,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    // Deleted filter
+    const deletedOnly = options.deletedOnly ?? false;
+    if (deletedOnly === true) {
+      where.isDeleted = true;
+    } else {
+      where.isDeleted = false;
+    }
+
+    // Date range filtering
+    if (startDate || endDate) {
+      where.startDate = {};
+
+      if (startDate) {
+        where.startDate.gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        where.startDate.lte = new Date(endDate);
+      }
+    }
+
+    console.log('findAll - where clause:', where); // Temporary debug
+
+    const total = await this.prisma.personnelContract.count({ where });
+    const data = await this.prisma.personnelContract.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { [sortBy]: sortOrder },
+    });
+
+    return { total, page, pageSize, data };
   }
 
   async createContractWithFile(
@@ -195,7 +256,6 @@ export class PersonnelService {
         startDate: new Date(createContractDto.startDate),
         endDate: new Date(createContractDto.endDate),
       };
-      console.log(normalizedDto);
 
       const contract = await tx.personnelContract.create({
         data: normalizedDto,
@@ -323,36 +383,50 @@ export class PersonnelService {
   }
 
   async removeContract(id: number) {
-    return this.prisma.personnelContract.update({
+    const personnelContract = await this.prisma.personnelContract.findUnique({
       where: { id },
-      data: { deletedAt: new Date() },
-      select: {
-        id: true,
-        deletedAt: true,
-        contractNumber: true,
+    });
+    if (!personnelContract)
+      throw new NotFoundException('personnelContract not found');
+
+    if (personnelContract.isDeleted) {
+      return {
+        id: personnelContract.id,
+        isDeleted: personnelContract.isDeleted,
+      };
+    }
+
+    const updated = await this.prisma.personnelContract.update({
+      where: { id },
+      data: {
+        isDeleted: true,
       },
     });
+
+    return updated;
   }
 
   async restoreContract(id: number) {
-    const contract = await this.prisma.personnelContract.findUnique({
+    const personnelContract = await this.prisma.personnelContract.findUnique({
       where: { id },
     });
+    if (!personnelContract)
+      throw new NotFoundException('personnelContract not found');
 
-    if (!contract) {
-      throw new NotFoundException(`Contract with ID ${id} not found`);
+    if (!personnelContract.isDeleted) {
+      return {
+        id: personnelContract.id,
+        isDeleted: personnelContract.isDeleted,
+      };
     }
 
-    return this.prisma.personnelContract.update({
+    const updated = await this.prisma.personnelContract.update({
       where: { id },
       data: {
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        deletedAt: true,
-        contractNumber: true,
+        isDeleted: false,
       },
     });
+
+    return updated;
   }
 }
