@@ -21,6 +21,7 @@ import {
   LogOut,
   Wrench,
   UserCircle,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -124,12 +125,6 @@ export default function Sidebar() {
                     variant="ghost"
                     className="w-full justify-start text-sm"
                   >
-                    Invoices
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
                     Customers
                   </Button>
                 </div>
@@ -190,6 +185,15 @@ export default function Sidebar() {
           >
             <UserCircle className="mr-2 h-4 w-4" />
             {!collapsed && "Personnel"}
+          </Button>
+        </Link>
+        <Link href="/invoices">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <ClipboardList className="mr-2 h-4 w-4" />
+            {!collapsed && "Invoices"}
           </Button>
         </Link>
         <Button

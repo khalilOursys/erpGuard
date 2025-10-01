@@ -15,6 +15,7 @@ import { ContractModule } from './contracts/contract.module';
 import { NotificationModule } from './notifications/notification.module';
 import { MissionModule } from './missions/mission.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     NotificationModule,
     MissionModule,
     AuditLogModule,
+    BillingModule,
   ],
   providers: [
     AppService,

@@ -73,6 +73,7 @@ enum BillingStatus {
 enum BillingLineType {
   SERVICE
   PERSONNEL
+  MISSION
   CUSTOM
 }
 
@@ -444,6 +445,7 @@ model MissionServiceRequirement {
   basePay       Decimal @default(0) @db.Decimal(16, 2) // what personnel gets (base)
   extraPay      Decimal @default(0) @db.Decimal(16, 2) // extra when on mission (e.g., overtime)
   clientPrice   Decimal @default(0) @db.Decimal(18, 2) // how much client is charged per personnel unit
+  billingLines  BillingLine[] 
 
   @@index([missionId])
   @@index([serviceId])
@@ -687,7 +689,9 @@ model Billing {
   periodEnd            DateTime
   invoiceDate          DateTime        @default(now())
   dueDate              DateTime?
-  amountBaseCurrency   Decimal         @db.Decimal(18, 2)
+  amountBaseCurrency   Decimal?         @db.Decimal(18, 2)
+  isDeleted            Boolean          @default(false)
+  deletedAt            DateTime?
   targetCurrency       String?
   conversionRate       Decimal?        @db.Decimal(24, 12)
   rateSource           RateSource?
@@ -710,22 +714,24 @@ model Billing {
 }
 
 model BillingLine {
-  id           Int                @id @default(autoincrement())
-  billing      Billing            @relation(fields: [billingId], references: [id])
-  billingId    Int
-  lineType     BillingLineType    @default(CUSTOM)
-  description  String
-  mission      Mission?           @relation(fields: [missionId], references: [id])
-  missionId    Int?
-  assignment   MissionAssignment? @relation(fields: [assignmentId], references: [id])
-  assignmentId Int?
-  personnel    Personnel?         @relation(fields: [personnelId], references: [id])
-  personnelId  Int?
-  service      Service?           @relation(fields: [serviceId], references: [id])
-  serviceId    Int?
-  contract     ClientContract?    @relation(fields: [contractId], references: [id])
-  contractId   Int?
-
+  id                  Int                @id @default(autoincrement())
+  billing             Billing            @relation(fields: [billingId], references: [id])
+  billingId           Int
+  lineType            BillingLineType    @default(CUSTOM)
+  description         String
+  mission             Mission?           @relation(fields: [missionId], references: [id])
+  missionId           Int?
+  assignment          MissionAssignment? @relation(fields: [assignmentId], references: [id])
+  assignmentId        Int?
+  missionService      MissionServiceRequirement ?@relation(fields: [missionServiceId], references: [id]) 
+  missionServiceId    Int?
+  personnel           Personnel?         @relation(fields: [personnelId], references: [id])
+  personnelId         Int?
+  service             Service?           @relation(fields: [serviceId], references: [id])
+  serviceId           Int?
+  contract            ClientContract?    @relation(fields: [contractId], references: [id])
+  contractId          Int?
+  
   personnelCount         Int      @default(1)
   quantity               Int      @default(1)
   unitPriceBase          Decimal  @db.Decimal(18, 2)

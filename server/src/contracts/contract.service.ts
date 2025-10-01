@@ -183,6 +183,11 @@ export class ContractService {
     return { total, page, pageSize, data: items };
   }
 
+  async getContractByIdClient(clientId: number) {
+    return this.prisma.clientContract.findMany({
+      where: { clientId, deletedAt: null },
+    });
+  }
   async findOne(companyId: number, id: number, withDeleted = false) {
     const contract = await this.prisma.clientContract.findUnique({
       where: { id },
@@ -220,8 +225,11 @@ export class ContractService {
     const pageSize = options.pageSize ?? 25;
 
     // ensure contract exists and belongs to company
-    const contract = await this.prisma.clientContract.findUnique({ where: { id: contractId } });
-    if (!contract || contract.companyId !== companyId) throw new NotFoundException('Contract not found');
+    const contract = await this.prisma.clientContract.findUnique({
+      where: { id: contractId },
+    });
+    if (!contract || contract.companyId !== companyId)
+      throw new NotFoundException('Contract not found');
 
     const where = { contractId, companyId };
 
@@ -448,11 +456,19 @@ export class ContractService {
 
     return updated;
   }
-  async attachFile(companyId: number, contractId: number, fileId: number, actorUserId: number) {
+  async attachFile(
+    companyId: number,
+    contractId: number,
+    fileId: number,
+    actorUserId: number,
+  ) {
     if (!actorUserId) throw new BadRequestException('Actor user id required');
 
-    const contract = await this.prisma.clientContract.findUnique({ where: { id: contractId }});
-    if (!contract || contract.companyId !== companyId) throw new NotFoundException('Contract not found');
+    const contract = await this.prisma.clientContract.findUnique({
+      where: { id: contractId },
+    });
+    if (!contract || contract.companyId !== companyId)
+      throw new NotFoundException('Contract not found');
 
     // ensure file exists
     const file = await this.prisma.file.findUnique({ where: { id: fileId } });
@@ -477,5 +493,4 @@ export class ContractService {
 
     return updated;
   }
-
 }

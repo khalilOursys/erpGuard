@@ -41,6 +41,16 @@ export class MissionController {
   }
 
   @Permissions('missions.read')
+  @Get('getContractByIdClient/:contractId')
+  async getMissionByIdContract(
+    @Req() req: any,
+    @Param('contractId', ParseIntPipe) contractId: number,
+  ) {
+    const companyId = req.user.companyId;
+    return this.svc.getMissionByIdContract(contractId);
+  }
+
+  @Permissions('missions.read')
   @Get(':id')
   async findOne(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     const companyId = req.user.companyId;
@@ -57,7 +67,11 @@ export class MissionController {
 
   @Permissions('missions.manage')
   @Put(':id')
-  async update(@Req() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMissionDto) {
+  async update(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMissionDto,
+  ) {
     const companyId = req.user.companyId;
     return this.svc.update(companyId, id, dto);
   }
@@ -79,7 +93,11 @@ export class MissionController {
   // Assignments
   @Permissions('missions.manage')
   @Post(':id/assignments')
-  async addAssignment(@Req() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateAssignmentDto) {
+  async addAssignment(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateAssignmentDto,
+  ) {
     const companyId = req.user.companyId;
     const actor = req.user.id;
     return this.svc.addAssignment(companyId, id, dto, actor);
@@ -87,7 +105,10 @@ export class MissionController {
 
   @Permissions('missions.read')
   @Get(':id/assignments')
-  async listAssignments(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+  async listAssignments(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const companyId = req.user.companyId;
     return this.svc.listAssignments(companyId, id);
   }

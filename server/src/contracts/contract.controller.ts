@@ -58,6 +58,15 @@ export class ContractController {
   }
 
   @Permissions('contracts.read')
+  @Get('getContractByIdClient/:clientId')
+  async getContractByIdClient(
+    @Req() req: any,
+    @Param('clientId', ParseIntPipe) clientId: number,
+  ) {
+    const companyId = req.user.companyId;
+    return this.svc.getContractByIdClient(clientId);
+  }
+  @Permissions('contracts.read')
   @Get(':id')
   async findOne(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     const companyId = req.user.companyId;
