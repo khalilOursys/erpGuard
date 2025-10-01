@@ -9,7 +9,9 @@ async function main() {
 
   // 1) Company
   const companyName = 'Default Company';
-  let company = await prisma.company.findUnique({ where: { name: companyName } });
+  let company = await prisma.company.findUnique({
+    where: { name: companyName },
+  });
   if (!company) {
     company = await prisma.company.create({
       data: { name: companyName, baseCurrency: 'USD' },
@@ -33,6 +35,7 @@ async function main() {
     { name: 'attendance.edit', description: 'Edit attendance' },
     { name: 'billing.read', description: 'View billing/invoices' },
     { name: 'billing.generate', description: 'Generate invoices' },
+    { name: 'billing.manage', description: 'Create/edit invoices' },
     { name: 'company.manage', description: 'Company-wide admin' },
     { name: 'company.read', description: 'Company-wide read' },
     { name: 'client.read', description: 'View clients' },
@@ -45,12 +48,14 @@ async function main() {
     { name: 'contracts.confirm', description: 'confirm contracts' },
     { name: 'notifications.read', description: 'read notifications' },
     { name: 'sites.read', description: 'read sites' },
-    { name: 'sites.manage', description: 'manage sites' }
+    { name: 'sites.manage', description: 'manage sites' },
   ];
 
   // Ensure each permission exists
   for (const p of perms) {
-    const existing = await prisma.permission.findUnique({ where: { name: p.name } });
+    const existing = await prisma.permission.findUnique({
+      where: { name: p.name },
+    });
     if (!existing) {
       await prisma.permission.create({ data: p });
     }
@@ -58,7 +63,7 @@ async function main() {
   console.log('Permissions ensured');
 
   // collect all permission names once so ADMIN can get them automatically
-  const allPermNames = perms.map(p => p.name);
+  const allPermNames = perms.map((p) => p.name);
 
   // 3) Role -> permission mappings
   const roleMap: Record<string, string[]> = {
@@ -70,27 +75,29 @@ async function main() {
       'personnel.read',
       'missions.read',
       'locations.read',
-      'locations.manage'
+      'locations.manage',
     ],
     ACCOUNTANT: [
       'billing.read',
       'billing.generate',
       'attendance.read',
       'locations.read',
-      'locations.manage'
+      'locations.manage',
     ],
     COMMERCIAL: [
       'services.manage',
       'missions.read',
       'personnel.read',
       'locations.read',
-      'locations.manage'
+      'locations.manage',
     ],
   };
 
   for (const [roleName, permNames] of Object.entries(roleMap)) {
     for (const permName of permNames) {
-      const perm = await prisma.permission.findUnique({ where: { name: permName } });
+      const perm = await prisma.permission.findUnique({
+        where: { name: permName },
+      });
       if (!perm) continue;
       const exists = await prisma.rolePermission.findFirst({
         where: { roleName, permissionId: perm.id },
@@ -168,7 +175,9 @@ async function main() {
     serviceId?: number;
   }) {
     if (data.email) {
-      const found = await prisma.personnel.findUnique({ where: { email: data.email } });
+      const found = await prisma.personnel.findUnique({
+        where: { email: data.email },
+      });
       if (found) return found;
     }
     return prisma.personnel.create({
@@ -212,7 +221,9 @@ async function main() {
   // 6) Admin user
   const adminIdentifier = 'admin';
   const adminPassword = 'adminpass';
-  let adminUser = await prisma.user.findUnique({ where: { identifier: adminIdentifier } });
+  let adminUser = await prisma.user.findUnique({
+    where: { identifier: adminIdentifier },
+  });
   if (!adminUser) {
     const hash = await bcrypt.hash(adminPassword, 10);
     adminUser = await prisma.user.create({
@@ -234,7 +245,9 @@ async function main() {
   const adminExplicitPerms = allPermNames;
 
   for (const permName of adminExplicitPerms) {
-    const perm = await prisma.permission.findUnique({ where: { name: permName } });
+    const perm = await prisma.permission.findUnique({
+      where: { name: permName },
+    });
     if (!perm) continue;
     const existingUP = await prisma.userPermission.findFirst({
       where: { userId: adminUser.id, permissionId: perm.id },
@@ -385,7 +398,9 @@ async function main() {
     personnelId: number,
     status: string,
   ) {
-    const exists = await prisma.attendance.findFirst({ where: { assignmentId, date } });
+    const exists = await prisma.attendance.findFirst({
+      where: { assignmentId, date },
+    });
     if (exists) return exists;
     return prisma.attendance.create({
       data: {
@@ -397,10 +412,22 @@ async function main() {
     });
   }
 
-  const assignments = await prisma.missionAssignment.findMany({ where: { missionId: mission.id } });
+  const assignments = await prisma.missionAssignment.findMany({
+    where: { missionId: mission.id },
+  });
   for (const a of assignments) {
-    await createAttendanceIfMissing(a.id, attendanceDate1, a.personnelId, 'PRESENT');
-    await createAttendanceIfMissing(a.id, attendanceDate2, a.personnelId, 'PRESENT');
+    await createAttendanceIfMissing(
+      a.id,
+      attendanceDate1,
+      a.personnelId,
+      'PRESENT',
+    );
+    await createAttendanceIfMissing(
+      a.id,
+      attendanceDate2,
+      a.personnelId,
+      'PRESENT',
+    );
   }
 
   console.log('Attendance sample records created');
@@ -438,7 +465,9 @@ async function main() {
   });
 
   let totalBase = 0;
-  const contractRates = await prisma.clientContractService.findMany({ where: { clientContractId: contract.id } });
+  const contractRates = await prisma.clientContractService.findMany({
+    where: { clientContractId: contract.id },
+  });
 
   for (const rate of contractRates) {
     const svcId = rate.serviceId;
@@ -464,8 +493,13 @@ async function main() {
     totalBase += lineTotal;
   }
 
-  await prisma.billing.update({ where: { id: billing.id }, data: { amountBaseCurrency: totalBase as any } });
-  console.log(`Billing created invoiceNumber=${invoiceNumber} total=${totalBase}`);
+  await prisma.billing.update({
+    where: { id: billing.id },
+    data: { amountBaseCurrency: totalBase as any },
+  });
+  console.log(
+    `Billing created invoiceNumber=${invoiceNumber} total=${totalBase}`,
+  );
 
   console.log('Seed finished successfully');
   createStaticAuditLogs(company);

@@ -346,6 +346,11 @@ export class ContractService {
     return { total, page, pageSize, data: items };
   }
 
+  async getContractByIdClient(clientId: number) {
+    return this.prisma.clientContract.findMany({
+      where: { clientId, deletedAt: null },
+    });
+  }
   async findOne(companyId: number, id: number, withDeleted = false) {
     const contract = await this.prisma.clientContract.findUnique({
       where: { id },
