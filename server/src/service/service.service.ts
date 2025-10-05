@@ -3,10 +3,11 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
-import { PrismaService } from 'src/prisma.service';
-import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ServiceService {
@@ -15,45 +16,69 @@ export class ServiceService {
     private auditService: AuditLogService,
   ) {}
 
-  async create(createServiceDto: CreateServiceDto, actorUserId: number) {
-    // Check if service with same name already exists for this company
-    const existingService = await this.prisma.service.findFirst({
+  // Utility to build Prisma data object for create, omitting undefined fields
+  private buildCreateData(dto: CreateServiceDto & { companyId: number }) {
+    const data: Prisma.ServiceCreateInput = {
+      company: { connect: { id: dto.companyId } },
+      name: dto.name,
+    };
+    if (dto.code !== undefined) data.code = dto.code;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.defaultBasePay !== undefined) data.defaultBasePay = dto.defaultBasePay;
+    if (dto.defaultExtraPay !== undefined) data.defaultExtraPay = dto.defaultExtraPay;
+    if (dto.defaultClientPrice !== undefined) data.defaultClientPrice = dto.defaultClientPrice;
+    return data;
+  }
+
+  // Utility to build Prisma data object for update, omitting undefined fields
+  private buildUpdateData(dto: UpdateServiceDto) {
+    const data: Prisma.ServiceUpdateInput = {};
+    if (dto.name !== undefined) data.name = { set: dto.name };
+    if (dto.code !== undefined) data.code = { set: dto.code };
+    if (dto.description !== undefined) data.description = { set: dto.description };
+    if (dto.isActive !== undefined) data.isActive = { set: dto.isActive };
+    if (dto.defaultBasePay !== undefined) data.defaultBasePay = { set: dto.defaultBasePay };
+    if (dto.defaultExtraPay !== undefined) data.defaultExtraPay = { set: dto.defaultExtraPay };
+    if (dto.defaultClientPrice !== undefined) data.defaultClientPrice = { set: dto.defaultClientPrice };
+    return data;
+  }
+
+  async create(createServiceDto: CreateServiceDto & { companyId: number }, actorUserId: number) {
+    const { companyId, ...dto } = createServiceDto;
+
+    // Check for duplicates in same company
+    const existing = await this.prisma.service.findFirst({
       where: {
-        companyId: createServiceDto.companyId,
+        companyId,
         OR: [
-          { name: createServiceDto.name },
-          ...(createServiceDto.code ? [{ code: createServiceDto.code }] : []),
+          { name: dto.name },
+          ...(dto.code ? [{ code: dto.code }] : []),
         ],
+        isDeleted: false,
       },
     });
-
-    if (existingService) {
-      throw new BadRequestException(
-        `Service with name '${createServiceDto.name}' or code '${createServiceDto.code}' already exists for this company`,
-      );
+    if (existing) {
+      throw new BadRequestException('Service with this name or code already exists in your company');
     }
-    const service = await this.prisma.service.create({
-      data: createServiceDto,
-    });
+
+    const data = this.buildCreateData(createServiceDto);
+
+    const service = await this.prisma.service.create({ data });
+
     await this.auditService.createAuditLog({
       userId: actorUserId,
       action: 'CREATE',
       entity: 'Service',
       entityId: service.id,
-      previousData: service,
+      previousData: null,
       newData: service,
     });
 
     return service;
   }
 
-  /**
-   * Paginated user listing with:
-   * - deletedOnly: boolean (if true => only deleted users; if false => only non-deleted)
-   * - search: free text on identifier/displayname/email
-   * - sorting, pagination
-   */
-  async findServices(
+  async findAll(
     companyId: number,
     options: {
       page?: number;
@@ -62,6 +87,8 @@ export class ServiceService {
       sortBy?: string;
       sortOrder?: 'asc' | 'desc';
       deletedOnly?: boolean;
+      inactiveOnly?: boolean;
+      code?: string;
     } = {},
   ) {
     const {
@@ -70,23 +97,35 @@ export class ServiceService {
       search = '',
       sortBy = 'name',
       sortOrder = 'asc',
+      deletedOnly = false,
+      inactiveOnly = false,
+      code,
     } = options;
 
-    const where: any = { companyId };
-    if (search) {
-      where.OR = [
-        { code: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+    console.log('FindAll Options:', { companyId, ...options }); // Debug log
+
+    const where: Prisma.ServiceWhereInput = { 
+      companyId,
+      isDeleted: deletedOnly,
+      isActive: !inactiveOnly, // Show active (true) by default, inactive (false) when inactiveOnly=true
+    };
+    if (search || code) {
+      where.AND = [];
+      if (search) {
+        where.AND.push({
+          OR: [
+            { code: { contains: search, mode: 'insensitive' } },
+            { name: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        });
+      }
+      if (code) {
+        where.AND.push({ code: { equals: code, mode: 'insensitive' } });
+      }
     }
-    const deletedOnly = options.deletedOnly ?? false; // Explicitly handle undefined
-    if (deletedOnly === true) {
-      where.isDeleted = true;
-    } else {
-      where.isDeleted = false;
-    }
-    console.log('findAll - where clause:', where); // Temporary debug
+
+    console.log('Where clause:', JSON.stringify(where, null, 2)); // Debug log
 
     const total = await this.prisma.service.count({ where });
     const data = await this.prisma.service.findMany({
@@ -99,132 +138,100 @@ export class ServiceService {
     return { total, page, pageSize, data };
   }
 
-  async findAllServices(companyId: number) {
-    return this.prisma.service.findMany({
-      where: { companyId, deletedAt: null },
-    });
-  }
-
-  async findOne(id: number) {
+  async findOne(companyId: number, id: number) {
     const service = await this.prisma.service.findUnique({
       where: { id },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        personnel: true,
-      },
     });
-
-    if (!service) {
-      throw new NotFoundException(`Service with ID ${id} not found`);
+    if (!service || service.companyId !== companyId) {
+      throw new NotFoundException('Service not found');
     }
-
     return service;
   }
 
   async update(
+    companyId: number,
     id: number,
-    updateServiceDto: UpdateServiceDto,
+    updateServiceDto: UpdateServiceDto & { companyId: number },
     actorUserId: number,
   ) {
-    const existingService = await this.findOne(id); // Verify service exists
+    const existing = await this.findOne(companyId, id);
 
-    // If updating name or code, check for duplicates within the same company
-    if (updateServiceDto.name || updateServiceDto.code) {
-      const existingService = await this.prisma.service.findFirst({
+    const { companyId: _, ...dto } = updateServiceDto; // Ignore companyId from DTO
+
+    // Check duplicates if updating name or code
+    if (dto.name || dto.code) {
+      const duplicate = await this.prisma.service.findFirst({
         where: {
           id: { not: id },
-          companyId: updateServiceDto.companyId,
+          companyId,
           OR: [
-            ...(updateServiceDto.name ? [{ name: updateServiceDto.name }] : []),
-            ...(updateServiceDto.code ? [{ code: updateServiceDto.code }] : []),
+            ...(dto.name ? [{ name: dto.name }] : []),
+            ...(dto.code ? [{ code: dto.code }] : []),
           ],
+          isDeleted: false,
         },
       });
-
-      if (existingService) {
-        throw new BadRequestException(
-          `Service with name '${updateServiceDto.name}' or code '${updateServiceDto.code}' already exists for this company`,
-        );
+      if (duplicate) {
+        throw new BadRequestException('Service with this name or code already exists in your company');
       }
     }
 
-    const updatedService = await this.prisma.service.update({
+    const data = this.buildUpdateData(dto);
+
+    const updated = await this.prisma.service.update({
       where: { id },
-      data: updateServiceDto,
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      data,
     });
 
-    // Audit log
     await this.auditService.createAuditLog({
       userId: actorUserId,
       action: 'UPDATE',
       entity: 'Service',
       entityId: id,
-      previousData: existingService,
-      newData: updatedService,
+      previousData: existing,
+      newData: updated,
     });
 
-    return updatedService;
+    return updated;
   }
 
-  async remove(id: number, actorUserId: number) {
-    const existingService = await this.findOne(id);
+  async remove(companyId: number, id: number, actorUserId: number) {
+    const existing = await this.findOne(companyId, id);
 
-    const result = await this.prisma.service.update({
+    const updated = await this.prisma.service.update({
       where: { id },
-      data: { deletedAt: new Date(), isDeleted: true },
+      data: { isDeleted: true, deletedAt: new Date() },
     });
 
-    // Audit log
     await this.auditService.createAuditLog({
       userId: actorUserId,
       action: 'DELETE',
       entity: 'Service',
       entityId: id,
-      newData: result,
-      previousData: existingService,
+      previousData: existing,
+      newData: updated,
     });
 
-    return result;
+    return updated;
   }
 
-  async restore(id: number, actorUserId: number) {
-    const service = await this.prisma.service.findUnique({ where: { id } });
-    if (!service) throw new NotFoundException('Service not found');
-
-    if (!service.isDeleted) {
-      return {
-        id: service.id,
-        isDeleted: service.isDeleted,
-      };
+  async restore(companyId: number, id: number, actorUserId: number) {
+    const existing = await this.findOne(companyId, id);
+    if (!existing.isDeleted) {
+      return existing;
     }
 
     const updated = await this.prisma.service.update({
       where: { id },
-      data: {
-        isDeleted: false,
-      },
+      data: { isDeleted: false, deletedAt: null },
     });
 
-    // Audit log
     await this.auditService.createAuditLog({
       userId: actorUserId,
       action: 'RESTORE',
       entity: 'Service',
       entityId: id,
-      previousData: service,
+      previousData: existing,
       newData: updated,
     });
 

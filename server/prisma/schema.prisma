@@ -159,8 +159,8 @@ model Site {
   address            String // free-form address line
   latitude           Float? // optional geo coordinates
   longitude          Float?
-  city               City?                 @relation(fields: [cityId], references: [id])
-  cityId             Int?
+  countryCode        String?
+  stateCode          String?
   client             Client               @relation(fields: [clientId], references: [id])
   clientId           Int
   missions           Mission[] // Site has many missions
@@ -171,7 +171,7 @@ model Site {
   ClientContractSite ClientContractSite[]
 
   @@index([clientId])
-  @@index([cityId])
+  City City[]
 }
 
 model City {
@@ -197,6 +197,8 @@ model ClientContact {
   value    String
   client   Client      @relation(fields: [clientId], references: [id])
   clientId Int
+  fileId Int?
+  file   File? @relation(fields: [fileId], references: [id])
   isDeleted Boolean    @default(false)
   deletedAt DateTime?
   @@index([clientId])
@@ -667,6 +669,7 @@ model File {
   contractExtensions ContractExtension[]
 
   @@index([filename])
+  ClientContact ClientContact[]
 }
 
 /**

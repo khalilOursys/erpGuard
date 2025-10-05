@@ -49,43 +49,77 @@ export class MissionService {
   /**
    * Find missions with pagination, search and filters.
    */
-  async findAll(companyId: number, options: any = {}) {
-    const {
-      page = 1, pageSize = 25, search = '', siteId, startFrom, startTo, deletedOnly = false,
-    } = options;
+async findAll(companyId: number, options: any = {}) {
+  const {
+    page = 1,
+    pageSize = 25,
+    search = '',
+    siteId,
+    startFrom,
+    startTo,
+    deletedOnly = false,
+    sortBy = 'startDate',
+    sortOrder = 'desc',
+  } = options;
 
-    const where: any = { companyId };
-    if (search) {
-      where.OR = [
-        { contract: { contractNumber: { contains: search, mode: 'insensitive' } } },
-        { contract: { client: { name: { contains: search, mode: 'insensitive' } } } },
-      ];
-    }
-    if (typeof siteId !== 'undefined') where.siteId = siteId;
-    if (startFrom || startTo) {
-      where.startDate = {};
-      if (startFrom) where.startDate.gte = new Date(startFrom);
-      if (startTo) where.startDate.lte = new Date(startTo);
-    }
-    if (deletedOnly === true) where.isDeleted = true;
-    else where.isDeleted = false;
-
-    const total = await this.prisma.mission.count({ where });
-    const items = await this.prisma.mission.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { startDate: 'desc' },
-      include: {
-        contract: { select: { id: true, contractNumber: true, clientId: true } },
-        site: true,
-        requirements: true,
-        assignments: { include: { personnel: true } },
-      },
-    });
-
-    return { total, page, pageSize, data: items };
+  const where: any = { companyId };
+  if (search) {
+    where.OR = [
+      { contract: { contractNumber: { contains: search, mode: 'insensitive' } } },
+      { contract: { client: { name: { contains: search, mode: 'insensitive' } } } },
+    ];
   }
+  if (typeof siteId !== 'undefined') where.siteId = siteId;
+  if (startFrom || startTo) {
+    where.startDate = {};
+    if (startFrom) where.startDate.gte = new Date(startFrom);
+    if (startTo) where.startDate.lte = new Date(startTo);
+  }
+  if (deletedOnly === true) where.isDeleted = true;
+  else where.isDeleted = false;
+
+  // Whitelist sortBy for security (add more fields if needed, e.g., 'endDate', 'requiredPersonnel')
+  const allowedSortFields = ['startDate', 'endDate', 'createdAt', 'requiredPersonnel'];
+  const effectiveSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'startDate';
+  const effectiveSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+
+  const total = await this.prisma.mission.count({ where });
+  const items = await this.prisma.mission.findMany({
+    where,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    orderBy: { [effectiveSortBy]: effectiveSortOrder },
+    include: {
+      contract: {
+        select: {
+          id: true,
+          contractNumber: true,
+          client: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      site: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      requirements: true,
+      assignments: { include: { personnel: true } },
+      manager: {
+        select: {
+          id: true,
+          displayname: true,
+        },
+      },
+    },
+  });
+
+  return { total, page, pageSize, data: items };
+}
 
   async findOne(companyId: number, id: number) {
     const mission = await this.prisma.mission.findUnique({

@@ -1,36 +1,36 @@
-import { IsOptional, IsString, IsNotEmpty, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsNumber, IsLongitude, IsLatitude } from 'class-validator';
 
 export class CreateSiteDto {
-  @IsOptional()
   @IsString()
+  @IsOptional()
   name?: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   road?: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   postalCode?: string;
 
-  @IsNotEmpty()
   @IsString()
-  address!: string;
+  address: string;
 
-  @IsOptional()
-  @Type(() => Number)
   @IsNumber()
+  @IsOptional()
+  @IsLatitude()
   latitude?: number;
 
-  @IsOptional()
-  @Type(() => Number)
   @IsNumber()
+  @IsOptional()
+  @IsLongitude()
   longitude?: number;
 
-  // cityId optional now
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  cityId?: number;
+  countryCode?: string;
+
+  @IsString()
+  @IsOptional()
+  stateCode?: string;
 }

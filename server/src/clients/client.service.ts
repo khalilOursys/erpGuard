@@ -1,3 +1,4 @@
+// src/modules/client/client.service.ts
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -12,21 +13,6 @@ export class ClientService {
   async create(companyId: number, dto: CreateClientDto, actorUserId?: number) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new BadRequestException('Company not found');
-
-    // Validate site cityIds existence if sites provided
-    if (dto.sites && dto.sites.length > 0) {
-      // Narrow cityIds to number[]
-      const cityIds = dto.sites
-        .map((s) => s.cityId)
-        .filter((id): id is number => typeof id === 'number');
-
-      if (cityIds.length > 0) {
-        const cities = await this.prisma.city.findMany({ where: { id: { in: cityIds } } });
-        if (cities.length !== new Set(cityIds).size) {
-          throw new BadRequestException('One or more site cityId values are invalid');
-        }
-      }
-    }
 
     return this.prisma.$transaction(async (tx) => {
       const client = await tx.client.create({
@@ -54,7 +40,8 @@ export class ClientService {
           address: s.address,
           latitude: s.latitude ?? null,
           longitude: s.longitude ?? null,
-          cityId: s.cityId ?? null,
+          countryCode: s.countryCode ?? null, // Explicitly typed as string | null
+          stateCode: s.stateCode ?? null,    // Explicitly typed as string | null
         }));
         await tx.site.createMany({ data: sitesData, skipDuplicates: true });
       }
@@ -141,24 +128,9 @@ export class ClientService {
     if (existing.isDeleted) {
       return { id: existing.id, name: existing.name, isDeleted: true };
     }
-
-    return this.prisma.$transaction(async (tx) => {
-      await tx.client.update({
-        where: { id },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
-
-      await tx.site.updateMany({
-        where: { clientId: id, isDeleted: false },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
-
-      await tx.clientContact.updateMany({
-        where: { clientId: id, isDeleted: false },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
-
-      return { id, isDeleted: true };
+    return this.prisma.client.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
     });
   }
 
@@ -169,35 +141,15 @@ export class ClientService {
     if (!existing.isDeleted) {
       return { id: existing.id, name: existing.name, isDeleted: false };
     }
-
-    return this.prisma.$transaction(async (tx) => {
-      await tx.client.update({
-        where: { id },
-        data: { isDeleted: false, deletedAt: null },
-      });
-
-      await tx.site.updateMany({
-        where: { clientId: id },
-        data: { isDeleted: false, deletedAt: null },
-      });
-
-      await tx.clientContact.updateMany({
-        where: { clientId: id },
-        data: { isDeleted: false, deletedAt: null },
-      });
-
-      return { id, isDeleted: false };
+    return this.prisma.client.update({
+      where: { id },
+      data: { isDeleted: false, deletedAt: null },
     });
   }
 
   async addSite(companyId: number, clientId: number, dto: CreateSiteDto) {
     const client = await this.prisma.client.findUnique({ where: { id: clientId } });
     if (!client || client.companyId !== companyId) throw new NotFoundException('Client not found');
-
-    if (dto.cityId) {
-      const city = await this.prisma.city.findUnique({ where: { id: dto.cityId } });
-      if (!city) throw new BadRequestException('City not found');
-    }
 
     const site = await this.prisma.site.create({
       data: {
@@ -208,7 +160,8 @@ export class ClientService {
         address: dto.address,
         latitude: dto.latitude ?? null,
         longitude: dto.longitude ?? null,
-        cityId: dto.cityId ?? null,
+        countryCode: dto.countryCode ?? null, // Ensure this is string | null
+        stateCode: dto.stateCode ?? null,    // Ensure this is string | null
       },
     });
     return site;
@@ -222,10 +175,6 @@ export class ClientService {
     if (!client || client.companyId !== companyId) throw new NotFoundException('Site not found');
 
     const data: any = { ...dto };
-    if (dto.cityId) {
-      const city = await this.prisma.city.findUnique({ where: { id: dto.cityId } });
-      if (!city) throw new BadRequestException('City not found');
-    }
 
     return this.prisma.site.update({
       where: { id: siteId },

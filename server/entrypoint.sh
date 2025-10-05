@@ -1,45 +1,45 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -e
 
-DB_HOST=${DB_HOST:-db}
-DB_PORT=${DB_PORT:-5432}
-DB_USER=${DB_USER:-postgres}
+# allow docker to override
+DB_HOST="${DB_HOST:-db}"
+DB_PORT="${DB_PORT:-5432}"
+DB_USER="${DB_USER:-postgres}"
+# DATABASE_URL should be present in env, e.g. postgresql://user:pass@db:5432/dbname
+: "${DATABASE_URL:?DATABASE_URL must be set}"
 
-# wait for postgres
-echo "Waiting for Postgres at ${DB_HOST}:${DB_PORT}..."
-RETRIES=60
-until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" >/dev/null 2>&1 || [ $RETRIES -le 0 ]; do
-  echo "Postgres is unavailable - sleeping..."
-  sleep 2
-  RETRIES=$((RETRIES - 1))
+# Wait for Postgres (uses pg_isready from postgresql-client)
+echo "Waiting for Postgres at $DB_HOST:$DB_PORT..."
+attempts=0
+until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" >/dev/null 2>&1; do
+  attempts=$((attempts+1))
+  if [ $attempts -ge 60 ]; then
+    echo "Postgres did not become available after 60s"
+    exit 1
+  fi
+  sleep 1
 done
 
-if [ $RETRIES -le 0 ]; then
-  echo "Postgres did not become available in time."
-  exit 1
+echo "Postgres is available."
+
+# Run prisma migrations if configured
+if [ -x "$(command -v npx)" ]; then
+  echo "Running prisma generate (safe) and migrate (if configured)..."
+  # generate client (idempotent)
+  npm run prisma:generate || true
+
+  # Deploy migrations in production if script exists
+  if npm run | grep -q "prisma:migrate:deploy"; then
+    echo "Running prisma:migrate:deploy..."
+    npm run prisma:migrate:deploy || {
+      echo "Prisma migrate failed (non-zero). Exiting."
+      exit 1
+    }
+  else
+    echo "No prisma:migrate:deploy script found; skipping migration step."
+  fi
 fi
 
-echo "Postgres is up."
-
-# Apply migrations (recommended for production)
-if [ "$PRISMA_MIGRATE" = "true" ]; then
-  echo "Running prisma migrate deploy..."
-  npx prisma migrate deploy
-else
-  # safe fallback for dev: push schema (non-destructive for dev)
-  echo "Running prisma db push..."
-  npx prisma db push
-fi
-
-# ensure prisma client up to date (in case schema changed at runtime)
-npx prisma generate
-
-# run seed if requested
-if [ "$RUN_SEED" = "true" ]; then
-  echo "Running seed script..."
-  # assumes you added "prisma:seed" script to package.json
-  npm run prisma:seed || true
-fi
-
-echo "Starting server"
-npm run start:prod
+# Start app (production)
+echo "Starting app..."
+exec npm run start:prod

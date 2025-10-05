@@ -1,16 +1,10 @@
-import { IsNotEmpty, IsEnum, IsString, IsOptional } from 'class-validator';
+import { IsEnum, IsString } from 'class-validator';
 import { ContactType } from '@prisma/client';
 
 export class CreateClientContactDto {
-  @IsNotEmpty()
   @IsEnum(ContactType)
-  type!: ContactType;
+  type: ContactType;
 
-  @IsNotEmpty()
   @IsString()
-  value!: string;
-
-  @IsOptional()
-  @IsString()
-  name?: string;
+  value: string;
 }

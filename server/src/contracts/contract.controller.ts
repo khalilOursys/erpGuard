@@ -19,7 +19,7 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PermissionsGuard } from 'src/common/guards/permissions.guard';
 import { Permissions } from 'src/common/decorators/permissions.decorator';
 import { QueryContractsDto } from './dto/query-contracts.dto';
-
+import { UpdateContractDto } from './dto/update-contract.dto';
 // file upload imports
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -87,6 +87,18 @@ export class ContractController {
     return this.svc.submitForReview(companyId, id, actor);
   }
 
+  @Permissions('contracts.manage') // Adjust permission as needed (e.g., same as create/submit)
+  @Patch(':id')
+  async update(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateContractDto,
+  ) {
+    const companyId = req.user.companyId;
+    const actor = req.user.id;
+    return this.svc.update(companyId, id, dto, actor);
+  }
+
   @Permissions('contracts.confirm')
   @Patch(':id/confirm')
   async confirm(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
@@ -115,7 +127,7 @@ export class ContractController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const uploadPath = `${process.cwd()}/uploads`;
+          const uploadPath = `${process.cwd()}/uploads/contracts`;
           if (!fs.existsSync(uploadPath))
             fs.mkdirSync(uploadPath, { recursive: true });
           cb(null, uploadPath);

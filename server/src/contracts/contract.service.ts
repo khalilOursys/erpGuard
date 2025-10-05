@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Injectable()
 export class ContractService {
@@ -126,8 +127,169 @@ export class ContractService {
       }
 
       // return created contract with relations
-      return this.prisma.clientContract.findUnique({
+      return tx.clientContract.findUnique({
         where: { id: contract.id },
+        include: {
+          serviceRates: true,
+          sites: {
+            include: {
+              services: true,
+            },
+          },
+          client: true,
+        },
+      });
+    });
+  }
+
+  async update(
+    companyId: number,
+    id: number,
+    dto: UpdateContractDto,
+    actorUserId?: number,
+  ) {
+    // Fetch existing contract to validate
+    const existing = await this.prisma.clientContract.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        serviceRates: true,
+        sites: { include: { services: true } },
+      },
+    });
+    if (!existing || existing.companyId !== companyId) {
+      throw new NotFoundException('Contract not found');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Only draft contracts can be updated');
+    }
+
+    // Validate client if changing
+    let clientId = existing.clientId;
+    if (dto.clientId && dto.clientId !== existing.clientId) {
+      const client = await this.prisma.client.findUnique({
+        where: { id: dto.clientId },
+      });
+      if (!client || client.companyId !== companyId) {
+        throw new BadRequestException('Client not found');
+      }
+      clientId = dto.clientId;
+    }
+
+    // Validate sites if provided
+    if (dto.sites && dto.sites.length > 0) {
+      const siteIds = dto.sites.map((s) => s.siteId);
+      const sites = await this.prisma.site.findMany({
+        where: { id: { in: siteIds } },
+      });
+      if (sites.length !== new Set(siteIds).size) {
+        throw new BadRequestException('One or more sites not found');
+      }
+      for (const s of sites) {
+        if (s.clientId !== clientId) {
+          throw new BadRequestException('Site does not belong to client');
+        }
+      }
+    }
+
+    // Validate services (contract-level & site-level)
+    const serviceIds: number[] = [];
+    if (dto.serviceRates) {
+      dto.serviceRates.forEach((sr) => serviceIds.push(sr.serviceId));
+    }
+    if (dto.sites) {
+      dto.sites.forEach((s) =>
+        s.services?.forEach((ss) => serviceIds.push(ss.serviceId)),
+      );
+    }
+    if (serviceIds.length > 0) {
+      const services = await this.prisma.service.findMany({
+        where: { id: { in: serviceIds }, companyId },
+      });
+      if (services.length !== new Set(serviceIds).size) {
+        throw new BadRequestException(
+          'One or more services not found or not owned by your company',
+        );
+      }
+    }
+
+    // Update in transaction
+    return this.prisma.$transaction(async (tx) => {
+      // Update top-level contract fields (only if provided in DTO)
+      const updateData: any = {};
+      if (dto.contractNumber) updateData.contractNumber = dto.contractNumber;
+      if (dto.clientId) updateData.clientId = dto.clientId;
+      if (dto.startDate) updateData.startDate = new Date(dto.startDate);
+      if (dto.endDate) updateData.endDate = new Date(dto.endDate);
+
+      const contract = await tx.clientContract.update({
+        where: { id },
+        data: updateData,
+      });
+
+      // Delete existing nested data
+      // First, delete site services (child of sites)
+      await tx.clientContractSiteService.deleteMany({
+        where: { contractSite: { clientContractId: id } },
+      });
+      // Then, delete sites
+      await tx.clientContractSite.deleteMany({
+        where: { clientContractId: id },
+      });
+      // Delete contract-level service rates
+      await tx.clientContractService.deleteMany({
+        where: { clientContractId: id },
+      });
+
+      // Recreate contract-level service rates if provided
+      if (dto.serviceRates && dto.serviceRates.length > 0) {
+        const createRates = dto.serviceRates.map((r) => ({
+          clientContractId: id,
+          serviceId: r.serviceId,
+          basePay: r.basePay ?? 0,
+          extraPay: r.extraPay ?? 0,
+          clientPrice: r.clientPrice ?? 0,
+          createdAt: new Date(),
+        }));
+        await tx.clientContractService.createMany({
+          data: createRates,
+          skipDuplicates: true,
+        });
+      }
+
+      // Recreate sites and their services if provided
+      if (dto.sites && dto.sites.length > 0) {
+        for (const s of dto.sites) {
+          const createdSite = await tx.clientContractSite.create({
+            data: {
+              clientContractId: id,
+              siteId: s.siteId,
+              startDate: new Date(s.startDate),
+              endDate: new Date(s.endDate),
+            },
+          });
+
+          if (s.services && s.services.length > 0) {
+            const siteServices = s.services.map((ss) => ({
+              contractSiteId: createdSite.id,
+              serviceId: ss.serviceId,
+              requiredCount: ss.requiredCount ?? 1,
+              basePay: ss.basePay ?? 0,
+              extraPay: ss.extraPay ?? 0,
+              clientPrice: ss.clientPrice ?? 0,
+              createdAt: new Date(),
+            }));
+            await tx.clientContractSiteService.createMany({
+              data: siteServices,
+              skipDuplicates: true,
+            });
+          }
+        }
+      }
+
+      // Return updated contract with relations (use tx for consistency)
+      return tx.clientContract.findUnique({
+        where: { id },
         include: {
           serviceRates: true,
           sites: {
@@ -169,6 +331,7 @@ export class ContractService {
       orderBy: { createdAt: 'desc' },
       include: {
         client: { select: { id: true, name: true } },
+        file: true,
         serviceRates: true,
         sites: { include: { services: true } },
         submittedBy: {
@@ -195,6 +358,7 @@ export class ContractService {
             site: true,
           },
         },
+        file: true,
         submittedBy: {
           select: { id: true, displayname: true, identifier: true },
         },
@@ -220,8 +384,11 @@ export class ContractService {
     const pageSize = options.pageSize ?? 25;
 
     // ensure contract exists and belongs to company
-    const contract = await this.prisma.clientContract.findUnique({ where: { id: contractId } });
-    if (!contract || contract.companyId !== companyId) throw new NotFoundException('Contract not found');
+    const contract = await this.prisma.clientContract.findUnique({
+      where: { id: contractId },
+    });
+    if (!contract || contract.companyId !== companyId)
+      throw new NotFoundException('Contract not found');
 
     const where = { contractId, companyId };
 
@@ -448,11 +615,19 @@ export class ContractService {
 
     return updated;
   }
-  async attachFile(companyId: number, contractId: number, fileId: number, actorUserId: number) {
+  async attachFile(
+    companyId: number,
+    contractId: number,
+    fileId: number,
+    actorUserId: number,
+  ) {
     if (!actorUserId) throw new BadRequestException('Actor user id required');
 
-    const contract = await this.prisma.clientContract.findUnique({ where: { id: contractId }});
-    if (!contract || contract.companyId !== companyId) throw new NotFoundException('Contract not found');
+    const contract = await this.prisma.clientContract.findUnique({
+      where: { id: contractId },
+    });
+    if (!contract || contract.companyId !== companyId)
+      throw new NotFoundException('Contract not found');
 
     // ensure file exists
     const file = await this.prisma.file.findUnique({ where: { id: fileId } });
@@ -477,5 +652,4 @@ export class ContractService {
 
     return updated;
   }
-
 }

@@ -1,7 +1,12 @@
 // src/lib/api.ts
 type Json = any;
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '');
+
+if (!process.env.NEXT_PUBLIC_API_URL && process.env.NODE_ENV === 'development') {
+  console.warn('NEXT_PUBLIC_API_URL not set in .env.local. Using fallback: http://localhost:3001. Set it for production!');
+}
 
 class ApiError extends Error {
   public status: number;
@@ -60,6 +65,8 @@ const api = {
     }
 
     const finalUrl = `${API_BASE}${url}`;
+    console.log(`API Request: ${opts.method || 'GET'} ${finalUrl}`); // Debug log for easier troubleshooting
+
     const response = await fetch(finalUrl, {
       credentials: "include",
       ...opts,
@@ -90,7 +97,7 @@ const api = {
     return this.request<T>(url, { method: "GET" });
   },
 
-  // POST with JSON body
+  // POST with JSON body or FormData
   async post<T = Json>(url: string, body?: any): Promise<T> {
     const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
     const opts: RequestInit = {
@@ -110,6 +117,15 @@ const api = {
     return this.request<T>(url, {
       method: "PUT",
       body: JSON.stringify(body),
+    });
+  },
+
+  // PATCH (JSON)
+  async patch<T = Json>(url: string, body?: any): Promise<T> {
+    const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
+    return this.request<T>(url, {
+      method: "PATCH",
+      body: payload,
     });
   },
 

@@ -43,7 +43,9 @@ async function main() {
     { name: 'contracts.read', description: 'View contracts' },
     { name: 'contracts.manage', description: 'Create/edit contracts' },
     { name: 'contracts.confirm', description: 'confirm contracts' },
-    { name: 'notifications.read', description: 'read notifications' }
+    { name: 'notifications.read', description: 'read notifications' },
+    { name: 'sites.read', description: 'read sites' },
+    { name: 'sites.manage', description: 'manage sites' }
   ];
 
   // Ensure each permission exists

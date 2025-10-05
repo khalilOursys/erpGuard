@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max, IsString, IsBoolean, IsDateString } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsBoolean, IsDateString, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryMissionsDto {
@@ -38,4 +38,12 @@ export class QueryMissionsDto {
   @Type(() => Boolean)
   @IsBoolean()
   deletedOnly?: boolean = false;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: string = 'startDate';
+
+  @IsOptional()
+  @IsEnum(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc' = 'desc';
 }

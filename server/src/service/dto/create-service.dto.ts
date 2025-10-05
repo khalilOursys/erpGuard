@@ -1,43 +1,31 @@
-import {
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsBoolean,
-  IsNumber,
-  IsDecimal,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsBoolean, IsNumber } from 'class-validator';
 
 export class CreateServiceDto {
-  @IsNotEmpty()
-  @IsInt()
-  companyId: number;
-
-  @IsNotEmpty()
   @IsString()
-  code: string;
+  @IsOptional()
+  code?: string;
 
-  @IsNotEmpty()
   @IsString()
   name: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   description?: string;
 
+  @IsBoolean()
   @IsOptional()
+  isActive?: boolean = true;
+
   @IsNumber()
-  @Type(() => Number)
+  @IsOptional()
   defaultBasePay?: number;
 
-  @IsOptional()
   @IsNumber()
-  @Type(() => Number)
+  @IsOptional()
   defaultExtraPay?: number;
 
-  @IsOptional()
   @IsNumber()
-  @Type(() => Number)
+  @IsOptional()
   defaultClientPrice?: number;
+  companyId: number | undefined;
 }

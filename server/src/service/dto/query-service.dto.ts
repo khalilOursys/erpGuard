@@ -1,12 +1,4 @@
-import {
-  IsOptional,
-  IsInt,
-  Min,
-  Max,
-  IsString,
-  IsIn,
-  IsBoolean,
-} from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsIn, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryServicesDto {
@@ -23,12 +15,10 @@ export class QueryServicesDto {
   @Max(200)
   pageSize?: number = 25;
 
-  // free-text search across identifier, displayname, email
   @IsOptional()
   @IsString()
   search?: string;
 
-  // sort field - limit allowed fields to avoid abuses
   @IsOptional()
   @IsString()
   @IsIn(['code', 'name', 'description', 'createdAt', 'updatedAt'])
@@ -39,10 +29,17 @@ export class QueryServicesDto {
   @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'asc';
 
-  // deletedOnly = true => return only deleted users
-  // deletedOnly = false or omitted => return only non-deleted users
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
   deletedOnly?: boolean = false;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  inactiveOnly?: boolean = false;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
 }
