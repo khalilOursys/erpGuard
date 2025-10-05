@@ -456,7 +456,7 @@ export default function ContractForm({
                 <SelectContent>
                   {sites.map((s) => (
                     <SelectItem key={s.id} value={s.id.toString()}>
-                      {s.name || s.address}
+                      {s.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
