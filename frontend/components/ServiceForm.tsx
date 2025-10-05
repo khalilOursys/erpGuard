@@ -33,7 +33,7 @@ const serviceSchema = z.object({
 type ServiceFormValues = z.infer<typeof serviceSchema>;
 
 interface ServiceFormProps {
-  service?: ServiceFormValues & { id: number };
+  service?: (ServiceFormValues & { id: number }) | null;  // <-- Added | null here to fix TS error
   onSuccess: () => void;
 }
 
