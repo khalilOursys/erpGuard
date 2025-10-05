@@ -110,7 +110,6 @@ export default function MissionsPage() {
       return response.data || [];
     },
     enabled: isChecked,
-    onError: (err) => toast.error("Failed to fetch sites"),
     retry: false, // Optional: Avoid retry spam during dev
   });
 
@@ -151,7 +150,6 @@ export default function MissionsPage() {
       return response; // api.get returns body directly
     },
     enabled: isChecked,
-    onError: (err) => toast.error("Failed to fetch missions"),
   });
 
   const missions = missionsResponse?.data || [];
