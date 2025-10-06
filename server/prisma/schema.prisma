@@ -95,24 +95,31 @@ enum ContractStatus {
 /**
  * Core models
  */
-
 model Company {
-  id           Int              @id @default(autoincrement())
-  name         String           @unique
-  address      String?
-  baseCurrency String           @default("USD") // 3-letter ISO code
-  contacts     CompanyContact[]
-  users        User[]
-  clients      Client[]
-  personnel    Personnel[] // personnel for this company
-  services     Service[] // services offered by this company
-  billings     Billing[]
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  isDeleted    Boolean          @default(false)
-  deletedAt    DateTime?
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  address         String?
+  baseCurrency    String           @default("USD") // 3-letter ISO code
+  rib             String?          // RIB (Relevé d'Identité Bancaire)
+  matriculeFiscale String?         // Tax identification number
+  email           String?          // Main email
+  phone           String?          // Main phone
+  logoId          Int?             // Reference to logo file
+  logo            File?            @relation(fields: [logoId], references: [id])
+  contacts        CompanyContact[]
+  users           User[]
+  clients         Client[]
+  personnel       Personnel[]      // personnel for this company
+  services        Service[]        // services offered by this company
+  billings        Billing[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  isDeleted       Boolean          @default(false)
+  deletedAt       DateTime?
 
   @@index([name])
+  @@index([matriculeFiscale])
+  @@index([email])
 }
 
 model CompanyContact {
@@ -669,9 +676,28 @@ model File {
   personnelContracts PersonnelContract[]
   clientContracts    ClientContract[]
   contractExtensions ContractExtension[]
+  companies Company[]
 
   @@index([filename])
   ClientContact ClientContact[]
+}
+
+/**
+ * Column configuration for billing/invoice display
+ */
+model ColumnConfig {
+  id        Int      @id @default(autoincrement())
+  billing   Billing  @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  billingId Int
+  key       String   // column identifier (e.g., "type", "quantity", "unitPrice")
+  label     String   // display name for the column
+  visible   Boolean  @default(true) // whether the column is visible
+  order     Int      @default(0) // display order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([billingId, key])
+  @@index([billingId])
 }
 
 /**
@@ -705,6 +731,7 @@ model Billing {
   notes                String?
   lines                BillingLine[]
   payments             Payment[]
+  columnConfigs        ColumnConfig[]  // Add this line for the relationship
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @default(now())
 

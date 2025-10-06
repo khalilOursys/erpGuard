@@ -8,9 +8,29 @@ import {
   IsEnum,
   IsArray,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BillingStatus, BillingLineType, RateSource } from '@prisma/client';
+
+export class CreateColumnConfigDto {
+  @IsOptional()
+  @IsNumber()
+  id?: number;
+
+  @IsString()
+  key: string;
+
+  @IsString()
+  label: string;
+
+  @IsBoolean()
+  visible: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  order?: number;
+}
 
 export class CreateBillingLineDto {
   @IsOptional()
@@ -172,4 +192,10 @@ export class CreateBillingDto {
   @ValidateNested({ each: true })
   @Type(() => CreateBillingLineDto)
   lines: CreateBillingLineDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateColumnConfigDto)
+  columnConfigs?: CreateColumnConfigDto[];
 }
