@@ -3,7 +3,14 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { ThemeProvider } from "next-themes";
@@ -23,13 +30,16 @@ export default function Login() {
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ identifier, password }),
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ identifier, password }),
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -39,7 +49,7 @@ export default function Login() {
       const data = await response.json();
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user)); // Store user details including permissions
-      router.push("/"); 
+      router.push("/");
     } catch (err: any) {
       setError(err.message || "An error occurred");
     } finally {
@@ -58,7 +68,9 @@ export default function Login() {
         <Card className="w-full max-w-md animate-fade-in">
           <CardHeader>
             <CardTitle className="text-2xl">Login to ERP</CardTitle>
-            <CardDescription>Enter your unique identifier and password</CardDescription>
+            <CardDescription>
+              Enter your unique identifier and password
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {error && <p className="text-destructive mb-4">{error}</p>}
@@ -91,7 +103,11 @@ export default function Login() {
                     className="absolute right-0 top-0 h-full px-3"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -101,7 +117,12 @@ export default function Login() {
             </form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <a href="#" className="text-sm text-muted-foreground hover:underline">Forgot password?</a>
+            <a
+              href="#"
+              className="text-sm text-muted-foreground hover:underline"
+            >
+              Forgot password?
+            </a>
           </CardFooter>
         </Card>
       </div>

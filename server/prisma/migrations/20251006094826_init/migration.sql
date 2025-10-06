@@ -37,6 +37,11 @@ CREATE TABLE "public"."Company" (
     "name" TEXT NOT NULL,
     "address" TEXT,
     "baseCurrency" TEXT NOT NULL DEFAULT 'USD',
+    "rib" TEXT,
+    "matriculeFiscale" TEXT,
+    "email" TEXT,
+    "phone" TEXT,
+    "logoId" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
@@ -437,6 +442,20 @@ CREATE TABLE "public"."File" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."ColumnConfig" (
+    "id" SERIAL NOT NULL,
+    "billingId" INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "visible" BOOLEAN NOT NULL DEFAULT true,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ColumnConfig_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."Billing" (
     "id" SERIAL NOT NULL,
     "invoiceNumber" TEXT,
@@ -448,7 +467,9 @@ CREATE TABLE "public"."Billing" (
     "periodEnd" TIMESTAMP(3) NOT NULL,
     "invoiceDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "dueDate" TIMESTAMP(3),
-    "amountBaseCurrency" DECIMAL(18,2) NOT NULL,
+    "amountBaseCurrency" DECIMAL(18,2),
+    "isDeleted" BOOLEAN NOT NULL DEFAULT false,
+    "deletedAt" TIMESTAMP(3),
     "targetCurrency" TEXT,
     "conversionRate" DECIMAL(24,12),
     "rateSource" "public"."RateSource",
@@ -471,6 +492,7 @@ CREATE TABLE "public"."BillingLine" (
     "description" TEXT NOT NULL,
     "missionId" INTEGER,
     "assignmentId" INTEGER,
+    "missionServiceId" INTEGER,
     "personnelId" INTEGER,
     "serviceId" INTEGER,
     "contractId" INTEGER,
@@ -522,6 +544,12 @@ CREATE UNIQUE INDEX "Company_name_key" ON "public"."Company"("name");
 
 -- CreateIndex
 CREATE INDEX "Company_name_idx" ON "public"."Company"("name");
+
+-- CreateIndex
+CREATE INDEX "Company_matriculeFiscale_idx" ON "public"."Company"("matriculeFiscale");
+
+-- CreateIndex
+CREATE INDEX "Company_email_idx" ON "public"."Company"("email");
 
 -- CreateIndex
 CREATE INDEX "CompanyContact_companyId_idx" ON "public"."CompanyContact"("companyId");
@@ -701,6 +729,12 @@ CREATE INDEX "PaymentRecord_periodStart_periodEnd_idx" ON "public"."PaymentRecor
 CREATE INDEX "File_filename_idx" ON "public"."File"("filename");
 
 -- CreateIndex
+CREATE INDEX "ColumnConfig_billingId_idx" ON "public"."ColumnConfig"("billingId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ColumnConfig_billingId_key_key" ON "public"."ColumnConfig"("billingId", "key");
+
+-- CreateIndex
 CREATE INDEX "Billing_companyId_idx" ON "public"."Billing"("companyId");
 
 -- CreateIndex
@@ -741,6 +775,9 @@ CREATE INDEX "Payment_billingId_idx" ON "public"."Payment"("billingId");
 
 -- CreateIndex
 CREATE INDEX "_CityToSite_B_index" ON "public"."_CityToSite"("B");
+
+-- AddForeignKey
+ALTER TABLE "public"."Company" ADD CONSTRAINT "Company_logoId_fkey" FOREIGN KEY ("logoId") REFERENCES "public"."File"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."CompanyContact" ADD CONSTRAINT "CompanyContact_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -881,6 +918,9 @@ ALTER TABLE "public"."PaymentRecord" ADD CONSTRAINT "PaymentRecord_generatedById
 ALTER TABLE "public"."File" ADD CONSTRAINT "File_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "public"."User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "public"."ColumnConfig" ADD CONSTRAINT "ColumnConfig_billingId_fkey" FOREIGN KEY ("billingId") REFERENCES "public"."Billing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "public"."Billing" ADD CONSTRAINT "Billing_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -900,6 +940,9 @@ ALTER TABLE "public"."BillingLine" ADD CONSTRAINT "BillingLine_missionId_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "public"."BillingLine" ADD CONSTRAINT "BillingLine_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "public"."MissionAssignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."BillingLine" ADD CONSTRAINT "BillingLine_missionServiceId_fkey" FOREIGN KEY ("missionServiceId") REFERENCES "public"."MissionServiceRequirement"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."BillingLine" ADD CONSTRAINT "BillingLine_personnelId_fkey" FOREIGN KEY ("personnelId") REFERENCES "public"."Personnel"("id") ON DELETE SET NULL ON UPDATE CASCADE;

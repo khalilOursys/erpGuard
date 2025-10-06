@@ -371,6 +371,12 @@ export class ContractService {
       throw new NotFoundException('Contract not found');
     return contract;
   }
+
+  async getContractByIdClient(clientId: number) {
+    return this.prisma.clientContract.findMany({
+      where: { clientId, deletedAt: null },
+    });
+  }
   /**
    * Return missions belonging to a contract (tenant-safe).
    * Supports basic pagination via page & pageSize.

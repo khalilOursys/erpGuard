@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { UpdateMissionDto } from './dto/update-mission.dto';
@@ -13,21 +17,32 @@ export class MissionService {
    * and that site (if provided) belongs to the same contract/client.
    */
   async create(companyId: number, dto: CreateMissionDto, actorUserId?: number) {
-    const contract = await this.prisma.clientContract.findUnique({ where: { id: dto.contractId } });
-    if (!contract || contract.companyId !== companyId) throw new BadRequestException('Contract not found');
+    const contract = await this.prisma.clientContract.findUnique({
+      where: { id: dto.contractId },
+    });
+    if (!contract || contract.companyId !== companyId)
+      throw new BadRequestException('Contract not found');
 
     if (dto.siteId) {
-      const site = await this.prisma.site.findUnique({ where: { id: dto.siteId } });
+      const site = await this.prisma.site.findUnique({
+        where: { id: dto.siteId },
+      });
       if (!site) throw new BadRequestException('Site not found');
       // ensure site belongs to the same client as contract
-      if (site.clientId !== contract.clientId) throw new BadRequestException('Site does not belong to contract client');
+      if (site.clientId !== contract.clientId)
+        throw new BadRequestException(
+          'Site does not belong to contract client',
+        );
     }
 
     // Determine managerId: prefer explicit DTO, then actor, then contract.submittedById
-    const resolvedManagerId = dto.managerId ?? actorUserId ?? contract.submittedById;
+    const resolvedManagerId =
+      dto.managerId ?? actorUserId ?? contract.submittedById;
     if (!resolvedManagerId) {
       // Prisma requires a non-null managerId. Fail fast so caller provides a manager.
-      throw new BadRequestException('managerId is required (provide managerId or call as an authenticated user)');
+      throw new BadRequestException(
+        'managerId is required (provide managerId or call as an authenticated user)',
+      );
     }
 
     const mission = await this.prisma.mission.create({
@@ -49,77 +64,92 @@ export class MissionService {
   /**
    * Find missions with pagination, search and filters.
    */
-async findAll(companyId: number, options: any = {}) {
-  const {
-    page = 1,
-    pageSize = 25,
-    search = '',
-    siteId,
-    startFrom,
-    startTo,
-    deletedOnly = false,
-    sortBy = 'startDate',
-    sortOrder = 'desc',
-  } = options;
+  async findAll(companyId: number, options: any = {}) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      siteId,
+      startFrom,
+      startTo,
+      deletedOnly = false,
+      sortBy = 'startDate',
+      sortOrder = 'desc',
+    } = options;
 
-  const where: any = { companyId };
-  if (search) {
-    where.OR = [
-      { contract: { contractNumber: { contains: search, mode: 'insensitive' } } },
-      { contract: { client: { name: { contains: search, mode: 'insensitive' } } } },
+    const where: any = { companyId };
+    if (search) {
+      where.OR = [
+        {
+          contract: {
+            contractNumber: { contains: search, mode: 'insensitive' },
+          },
+        },
+        {
+          contract: {
+            client: { name: { contains: search, mode: 'insensitive' } },
+          },
+        },
+      ];
+    }
+    if (typeof siteId !== 'undefined') where.siteId = siteId;
+    if (startFrom || startTo) {
+      where.startDate = {};
+      if (startFrom) where.startDate.gte = new Date(startFrom);
+      if (startTo) where.startDate.lte = new Date(startTo);
+    }
+    if (deletedOnly === true) where.isDeleted = true;
+    else where.isDeleted = false;
+
+    // Whitelist sortBy for security (add more fields if needed, e.g., 'endDate', 'requiredPersonnel')
+    const allowedSortFields = [
+      'startDate',
+      'endDate',
+      'createdAt',
+      'requiredPersonnel',
     ];
-  }
-  if (typeof siteId !== 'undefined') where.siteId = siteId;
-  if (startFrom || startTo) {
-    where.startDate = {};
-    if (startFrom) where.startDate.gte = new Date(startFrom);
-    if (startTo) where.startDate.lte = new Date(startTo);
-  }
-  if (deletedOnly === true) where.isDeleted = true;
-  else where.isDeleted = false;
+    const effectiveSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : 'startDate';
+    const effectiveSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
-  // Whitelist sortBy for security (add more fields if needed, e.g., 'endDate', 'requiredPersonnel')
-  const allowedSortFields = ['startDate', 'endDate', 'createdAt', 'requiredPersonnel'];
-  const effectiveSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'startDate';
-  const effectiveSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
-
-  const total = await this.prisma.mission.count({ where });
-  const items = await this.prisma.mission.findMany({
-    where,
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    orderBy: { [effectiveSortBy]: effectiveSortOrder },
-    include: {
-      contract: {
-        select: {
-          id: true,
-          contractNumber: true,
-          client: {
-            select: {
-              name: true,
+    const total = await this.prisma.mission.count({ where });
+    const items = await this.prisma.mission.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { [effectiveSortBy]: effectiveSortOrder },
+      include: {
+        contract: {
+          select: {
+            id: true,
+            contractNumber: true,
+            client: {
+              select: {
+                name: true,
+              },
             },
           },
         },
-      },
-      site: {
-        select: {
-          id: true,
-          name: true,
+        site: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        requirements: true,
+        assignments: { include: { personnel: true } },
+        manager: {
+          select: {
+            id: true,
+            displayname: true,
+          },
         },
       },
-      requirements: true,
-      assignments: { include: { personnel: true } },
-      manager: {
-        select: {
-          id: true,
-          displayname: true,
-        },
-      },
-    },
-  });
+    });
 
-  return { total, page, pageSize, data: items };
-}
+    return { total, page, pageSize, data: items };
+  }
 
   async findOne(companyId: number, id: number) {
     const mission = await this.prisma.mission.findUnique({
@@ -131,14 +161,17 @@ async findAll(companyId: number, options: any = {}) {
         assignments: { include: { personnel: true, paymentRecords: true } },
       },
     });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
     return mission;
   }
 
   async update(companyId: number, id: number, dto: UpdateMissionDto) {
     const mission = await this.prisma.mission.findUnique({ where: { id } });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
-    if (mission.isDeleted) throw new BadRequestException('Cannot update deleted mission');
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
+    if (mission.isDeleted)
+      throw new BadRequestException('Cannot update deleted mission');
 
     const data: any = { ...dto };
     if (dto.startDate) data.startDate = new Date(dto.startDate);
@@ -154,7 +187,8 @@ async findAll(companyId: number, options: any = {}) {
 
   async remove(companyId: number, id: number) {
     const mission = await this.prisma.mission.findUnique({ where: { id } });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
 
     if (mission.isDeleted) return { id: mission.id, isDeleted: true };
 
@@ -169,7 +203,8 @@ async findAll(companyId: number, options: any = {}) {
 
   async restore(companyId: number, id: number) {
     const mission = await this.prisma.mission.findUnique({ where: { id } });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
 
     if (!mission.isDeleted) return { id: mission.id, isDeleted: false };
 
@@ -185,12 +220,23 @@ async findAll(companyId: number, options: any = {}) {
   /**
    * Create an assignment for a mission.
    */
-  async addAssignment(companyId: number, missionId: number, dto: CreateAssignmentDto, actorUserId?: number) {
-    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
+  async addAssignment(
+    companyId: number,
+    missionId: number,
+    dto: CreateAssignmentDto,
+    actorUserId?: number,
+  ) {
+    const mission = await this.prisma.mission.findUnique({
+      where: { id: missionId },
+    });
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
 
-    const personnel = await this.prisma.personnel.findUnique({ where: { id: dto.personnelId } });
-    if (!personnel || personnel.companyId !== companyId) throw new BadRequestException('Personnel not found');
+    const personnel = await this.prisma.personnel.findUnique({
+      where: { id: dto.personnelId },
+    });
+    if (!personnel || personnel.companyId !== companyId)
+      throw new BadRequestException('Personnel not found');
 
     const assignment = await this.prisma.missionAssignment.create({
       data: {
@@ -206,8 +252,11 @@ async findAll(companyId: number, options: any = {}) {
   }
 
   async listAssignments(companyId: number, missionId: number) {
-    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
-    if (!mission || mission.companyId !== companyId) throw new NotFoundException('Mission not found');
+    const mission = await this.prisma.mission.findUnique({
+      where: { id: missionId },
+    });
+    if (!mission || mission.companyId !== companyId)
+      throw new NotFoundException('Mission not found');
 
     const items = await this.prisma.missionAssignment.findMany({
       where: { missionId },
@@ -215,5 +264,17 @@ async findAll(companyId: number, options: any = {}) {
     });
 
     return items;
+  }
+
+  async getMissionByIdContract(contractId: number) {
+    return this.prisma.mission.findMany({
+      where: { contractId, deletedAt: null },
+      include: {
+        contract: { include: { client: true } },
+        site: true,
+        requirements: { include: { service: true } },
+        assignments: { include: { personnel: true, paymentRecords: true } },
+      },
+    });
   }
 }

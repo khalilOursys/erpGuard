@@ -25,9 +25,12 @@ export class ServiceService {
     if (dto.code !== undefined) data.code = dto.code;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
-    if (dto.defaultBasePay !== undefined) data.defaultBasePay = dto.defaultBasePay;
-    if (dto.defaultExtraPay !== undefined) data.defaultExtraPay = dto.defaultExtraPay;
-    if (dto.defaultClientPrice !== undefined) data.defaultClientPrice = dto.defaultClientPrice;
+    if (dto.defaultBasePay !== undefined)
+      data.defaultBasePay = dto.defaultBasePay;
+    if (dto.defaultExtraPay !== undefined)
+      data.defaultExtraPay = dto.defaultExtraPay;
+    if (dto.defaultClientPrice !== undefined)
+      data.defaultClientPrice = dto.defaultClientPrice;
     return data;
   }
 
@@ -36,30 +39,36 @@ export class ServiceService {
     const data: Prisma.ServiceUpdateInput = {};
     if (dto.name !== undefined) data.name = { set: dto.name };
     if (dto.code !== undefined) data.code = { set: dto.code };
-    if (dto.description !== undefined) data.description = { set: dto.description };
+    if (dto.description !== undefined)
+      data.description = { set: dto.description };
     if (dto.isActive !== undefined) data.isActive = { set: dto.isActive };
-    if (dto.defaultBasePay !== undefined) data.defaultBasePay = { set: dto.defaultBasePay };
-    if (dto.defaultExtraPay !== undefined) data.defaultExtraPay = { set: dto.defaultExtraPay };
-    if (dto.defaultClientPrice !== undefined) data.defaultClientPrice = { set: dto.defaultClientPrice };
+    if (dto.defaultBasePay !== undefined)
+      data.defaultBasePay = { set: dto.defaultBasePay };
+    if (dto.defaultExtraPay !== undefined)
+      data.defaultExtraPay = { set: dto.defaultExtraPay };
+    if (dto.defaultClientPrice !== undefined)
+      data.defaultClientPrice = { set: dto.defaultClientPrice };
     return data;
   }
 
-  async create(createServiceDto: CreateServiceDto & { companyId: number }, actorUserId: number) {
+  async create(
+    createServiceDto: CreateServiceDto & { companyId: number },
+    actorUserId: number,
+  ) {
     const { companyId, ...dto } = createServiceDto;
 
     // Check for duplicates in same company
     const existing = await this.prisma.service.findFirst({
       where: {
         companyId,
-        OR: [
-          { name: dto.name },
-          ...(dto.code ? [{ code: dto.code }] : []),
-        ],
+        OR: [{ name: dto.name }, ...(dto.code ? [{ code: dto.code }] : [])],
         isDeleted: false,
       },
     });
     if (existing) {
-      throw new BadRequestException('Service with this name or code already exists in your company');
+      throw new BadRequestException(
+        'Service with this name or code already exists in your company',
+      );
     }
 
     const data = this.buildCreateData(createServiceDto);
@@ -104,7 +113,7 @@ export class ServiceService {
 
     console.log('FindAll Options:', { companyId, ...options }); // Debug log
 
-    const where: Prisma.ServiceWhereInput = { 
+    const where: Prisma.ServiceWhereInput = {
       companyId,
       isDeleted: deletedOnly,
       isActive: !inactiveOnly, // Show active (true) by default, inactive (false) when inactiveOnly=true
@@ -136,6 +145,12 @@ export class ServiceService {
     });
 
     return { total, page, pageSize, data };
+  }
+
+  async findAllServices(companyId: number) {
+    return this.prisma.service.findMany({
+      where: { companyId, deletedAt: null },
+    });
   }
 
   async findOne(companyId: number, id: number) {
@@ -172,7 +187,9 @@ export class ServiceService {
         },
       });
       if (duplicate) {
-        throw new BadRequestException('Service with this name or code already exists in your company');
+        throw new BadRequestException(
+          'Service with this name or code already exists in your company',
+        );
       }
     }
 
