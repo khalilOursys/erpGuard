@@ -10,6 +10,8 @@ import {
   Delete,
   Req,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -18,6 +20,8 @@ import { QueryCompaniesDto } from './dto/query-companies.dto';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PermissionsGuard } from 'src/common/guards/permissions.guard';
 import { Permissions } from 'src/common/decorators/permissions.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { multerCompanyConfig } from 'src/config/multer.config';
 
 @Controller('companies')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -51,8 +55,13 @@ export class CompanyController {
 
   @Permissions('company.manage')
   @Put(':id')
-  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCompanyDto) {
-    return this.companyService.update(id, dto);
+  @UseInterceptors(FileInterceptor('file', multerCompanyConfig))
+  async updateContractWithFile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDto: any,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.companyService.update(id, updateDto, file);
   }
 
   @Permissions('company.manage')

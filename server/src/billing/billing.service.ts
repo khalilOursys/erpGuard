@@ -145,7 +145,7 @@ export class BillingService {
           0,
         );
 
-        // Create the billing with lines
+        // Create the billing with lines and column configs
         const billing = await prisma.billing.create({
           data: {
             invoiceNumber,
@@ -196,6 +196,19 @@ export class BillingService {
                 taxAmountTarget: line.taxAmountTarget,
               })),
             },
+            // Add column configs creation
+            columnConfigs: createBillingDto.columnConfigs
+              ? {
+                  create: createBillingDto.columnConfigs.map(
+                    (config, index) => ({
+                      key: config.key,
+                      label: config.label,
+                      visible: config.visible,
+                      order: config.order ?? index,
+                    }),
+                  ),
+                }
+              : undefined,
           },
           include: {
             company: true,
@@ -217,6 +230,7 @@ export class BillingService {
               orderBy: { id: 'asc' },
             },
             payments: true,
+            columnConfigs: true, // Include column configs in response
           },
         });
 
@@ -237,7 +251,10 @@ export class BillingService {
     // Check if billing exists
     const existingBilling = await this.prisma.billing.findUnique({
       where: { id },
-      include: { lines: true },
+      include: {
+        lines: true,
+        columnConfigs: true,
+      },
     });
 
     if (!existingBilling) {
@@ -250,8 +267,9 @@ export class BillingService {
       try {
         const data: any = {
           ...updateBillingDto,
-          // Remove lines from main update as we handle them separately
+          // Remove lines and columnConfigs from main update as we handle them separately
           lines: undefined,
+          columnConfigs: undefined,
         };
 
         // Handle date conversions
@@ -357,7 +375,58 @@ export class BillingService {
           }
         }
 
-        // Return the complete updated billing with lines
+        // Handle column configs update if provided
+        if (updateBillingDto.columnConfigs) {
+          // Get existing column config IDs
+          const existingConfigIds = existingBilling.columnConfigs.map(
+            (config) => config.id,
+          );
+
+          // Extract config IDs from update (for existing configs)
+          const updatedConfigIds = updateBillingDto.columnConfigs
+            .map((config) => config.id)
+            .filter((id) => id !== undefined) as number[];
+
+          // Configs to delete (exist in DB but not in update)
+          const configsToDelete = existingConfigIds.filter(
+            (id) => !updatedConfigIds.includes(id),
+          );
+
+          // Delete removed configs
+          if (configsToDelete.length > 0) {
+            await prisma.columnConfig.deleteMany({
+              where: { id: { in: configsToDelete } },
+            });
+          }
+
+          // Process each column config in the update
+          for (const configDto of updateBillingDto.columnConfigs) {
+            const configData = {
+              key: configDto.key,
+              label: configDto.label,
+              visible: configDto.visible,
+              order: configDto.order,
+            };
+
+            if (configDto.id && existingConfigIds.includes(configDto.id)) {
+              // Update existing config
+              await prisma.columnConfig.update({
+                where: { id: configDto.id },
+                data: configData,
+              });
+            } else {
+              // Create new config
+              await prisma.columnConfig.create({
+                data: {
+                  ...configData,
+                  billingId: id,
+                },
+              });
+            }
+          }
+        }
+
+        // Return the complete updated billing with lines and column configs
         return await prisma.billing.findUnique({
           where: { id },
           include: {
@@ -380,6 +449,9 @@ export class BillingService {
               orderBy: { id: 'asc' },
             },
             payments: true,
+            columnConfigs: {
+              orderBy: { order: 'asc' },
+            },
           },
         });
       } catch (error) {
@@ -406,8 +478,8 @@ export class BillingService {
       sortBy?: string;
       sortOrder?: 'asc' | 'desc';
       deletedOnly?: boolean;
-      periodStart?: Date | string; // Add periodStart filter
-      periodEnd?: Date | string; // Add periodEnd filter
+      periodStart?: Date | string;
+      periodEnd?: Date | string;
     } = {},
   ) {
     const {
@@ -450,7 +522,7 @@ export class BillingService {
       }
     }
 
-    console.log('findAll khalil- where clause:', where); // Temporary debug
+    console.log('findAll - where clause:', where);
 
     const total = await this.prisma.billing.count({ where });
     const data = await this.prisma.billing.findMany({
@@ -460,6 +532,7 @@ export class BillingService {
         contract: true,
         lines: true,
         payments: true,
+        columnConfigs: true, // Include column configs
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -492,6 +565,9 @@ export class BillingService {
           },
           orderBy: { id: 'asc' },
         },
+        columnConfigs: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
 
@@ -519,6 +595,9 @@ export class BillingService {
           },
         },
         payments: true,
+        columnConfigs: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
 
@@ -541,6 +620,7 @@ export class BillingService {
           contract: true,
           lines: true,
           payments: true,
+          columnConfigs: true,
         },
       });
     } catch (error) {
