@@ -12,6 +12,7 @@ import {
   Put,
   Req,
   UseGuards,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import { ServiceService } from './service.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -32,7 +33,10 @@ export class ServiceController {
   create(@Body() createServiceDto: CreateServiceDto, @Req() req: any) {
     const companyId = req.user.companyId;
     const actorUserId = req.user.id;
-    return this.serviceService.create({ ...createServiceDto, companyId }, actorUserId);
+    return this.serviceService.create(
+      { ...createServiceDto, companyId },
+      actorUserId,
+    );
   }
 
   @Get()
@@ -48,6 +52,14 @@ export class ServiceController {
       deletedOnly: query.deletedOnly,
       inactiveOnly: query.inactiveOnly,
     });
+  }
+
+  @Get('findAllServices')
+  findAllServices(
+    @Query('companyId', new DefaultValuePipe(0), ParseIntPipe)
+    companyId: number,
+  ) {
+    return this.serviceService.findAllServices(companyId);
   }
 
   @Get(':id')
@@ -66,7 +78,12 @@ export class ServiceController {
   ) {
     const companyId = req.user.companyId;
     const actorUserId = req.user.id;
-    return this.serviceService.update(companyId, id, { ...updateServiceDto, companyId }, actorUserId);
+    return this.serviceService.update(
+      companyId,
+      id,
+      { ...updateServiceDto, companyId },
+      actorUserId,
+    );
   }
 
   @Delete(':id')

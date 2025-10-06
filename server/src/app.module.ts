@@ -20,6 +20,7 @@ import { FilesModule } from './files/files.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { SitesModule } from './sites/sites.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -37,14 +38,15 @@ import { SitesModule } from './sites/sites.module';
     SitesModule,
     ServiceModule,
     FilesModule,
+    BillingModule,
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads/contracts'),  // Absolute path to the folder
-      serveRoot: '/uploads/contracts',  // URL prefix to match your DB URLs (e.g., /uploads/contracts/123456.pdf)
+      rootPath: join(process.cwd(), 'uploads/contracts'), // Absolute path to the folder
+      serveRoot: '/uploads/contracts', // URL prefix to match your DB URLs (e.g., /uploads/contracts/123456.pdf)
       serveStaticOptions: {
         // Optional: Cache control, etc., for production
-        maxAge: 3600000,  // 1 hour cache
+        maxAge: 3600000, // 1 hour cache
         setHeaders: (res) => {
-          res.setHeader('Content-Disposition', 'attachment');  // Force download instead of inline view (optional, but good for PDFs)
+          res.setHeader('Content-Disposition', 'attachment'); // Force download instead of inline view (optional, but good for PDFs)
         },
       },
     }),
