@@ -701,6 +701,24 @@ model ColumnConfig {
 }
 
 /**
+ * Column configuration for billing/invoice display
+ */
+model ColumnConfig {
+  id        Int      @id @default(autoincrement())
+  billing   Billing  @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  billingId Int
+  key       String   // column identifier (e.g., "type", "quantity", "unitPrice")
+  label     String   // display name for the column
+  visible   Boolean  @default(true) // whether the column is visible
+  order     Int      @default(0) // display order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([billingId, key])
+  @@index([billingId])
+}
+
+/**
  * ---- Billing / Invoice system ----
  */
 model Billing {

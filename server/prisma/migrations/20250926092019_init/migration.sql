@@ -83,12 +83,16 @@ CREATE TABLE "public"."Site" (
     "address" TEXT NOT NULL,
     "latitude" DOUBLE PRECISION,
     "longitude" DOUBLE PRECISION,
+<<<<<<< HEAD
 <<<<<<<< HEAD:server/prisma/migrations/20251002195535_update_db/migration.sql
     "countryCode" TEXT,
     "stateCode" TEXT,
 ========
     "cityId" INTEGER,
 >>>>>>>> b6538d3 (invoice module implementation):server/prisma/migrations/20250926092019_init/migration.sql
+=======
+    "cityId" INTEGER,
+>>>>>>> d30e041f3cd88aa01a7f234d046ba739a1bc1229
     "clientId" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -118,10 +122,13 @@ CREATE TABLE "public"."ClientContact" (
     "type" "public"."ContactType" NOT NULL,
     "value" TEXT NOT NULL,
     "clientId" INTEGER NOT NULL,
+<<<<<<< HEAD
 <<<<<<<< HEAD:server/prisma/migrations/20251002195535_update_db/migration.sql
     "fileId" INTEGER,
 ========
 >>>>>>>> b6538d3 (invoice module implementation):server/prisma/migrations/20250926092019_init/migration.sql
+=======
+>>>>>>> d30e041f3cd88aa01a7f234d046ba739a1bc1229
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
     "deletedAt" TIMESTAMP(3),
 
@@ -542,12 +549,18 @@ CREATE INDEX "Client_name_idx" ON "public"."Client"("name");
 
 -- CreateIndex
 CREATE INDEX "Site_clientId_idx" ON "public"."Site"("clientId");
+<<<<<<< HEAD
 <<<<<<<< HEAD:server/prisma/migrations/20251002195535_update_db/migration.sql
 ========
 
 -- CreateIndex
 CREATE INDEX "Site_cityId_idx" ON "public"."Site"("cityId");
 >>>>>>>> b6538d3 (invoice module implementation):server/prisma/migrations/20250926092019_init/migration.sql
+=======
+
+-- CreateIndex
+CREATE INDEX "Site_cityId_idx" ON "public"."Site"("cityId");
+>>>>>>> d30e041f3cd88aa01a7f234d046ba739a1bc1229
 
 -- CreateIndex
 CREATE INDEX "City_name_idx" ON "public"."City"("name");
@@ -763,12 +776,18 @@ ALTER TABLE "public"."CompanyContact" ADD CONSTRAINT "CompanyContact_companyId_f
 ALTER TABLE "public"."Client" ADD CONSTRAINT "Client_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+<<<<<<< HEAD
 <<<<<<<< HEAD:server/prisma/migrations/20251002195535_update_db/migration.sql
 ========
 ALTER TABLE "public"."Site" ADD CONSTRAINT "Site_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "public"."City"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 >>>>>>>> b6538d3 (invoice module implementation):server/prisma/migrations/20250926092019_init/migration.sql
+=======
+ALTER TABLE "public"."Site" ADD CONSTRAINT "Site_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "public"."City"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+>>>>>>> d30e041f3cd88aa01a7f234d046ba739a1bc1229
 ALTER TABLE "public"."Site" ADD CONSTRAINT "Site_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "public"."Client"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey

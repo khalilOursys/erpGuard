@@ -151,6 +151,18 @@ export class MissionService {
     return { total, page, pageSize, data: items };
   }
 
+  async getMissionByIdContract(contractId: number) {
+    return this.prisma.mission.findMany({
+      where: { contractId, deletedAt: null },
+      include: {
+        contract: { include: { client: true } },
+        site: true,
+        requirements: { include: { service: true } },
+        assignments: { include: { personnel: true, paymentRecords: true } },
+      },
+    });
+  }
+
   async findOne(companyId: number, id: number) {
     const mission = await this.prisma.mission.findUnique({
       where: { id },
