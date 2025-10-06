@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Types (same as before)
 interface Client {
@@ -83,7 +84,7 @@ interface Mission {
 
 interface BillingLine {
   id: number;
-  billingId?: number; // Make optional since it might not be needed for updates
+  billingId?: number;
   lineType: "MISSION" | "SERVICE" | "CUSTOM";
   description: string;
   missionId?: number;
@@ -106,6 +107,13 @@ interface BillingLine {
   missionServiceRequirement?: MissionServiceRequirement;
 }
 
+// Column configuration interface
+interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+}
+
 interface CreateBillingData {
   clientId: number;
   status?: string;
@@ -119,6 +127,7 @@ interface CreateBillingData {
   conversionRate?: number;
   notes?: string;
   lines: Omit<BillingLine, "id" | "billingId">[];
+  columnConfigs?: ColumnConfig[];
 }
 
 interface UpdateBillingData extends CreateBillingData {
@@ -131,6 +140,7 @@ interface Billing extends CreateBillingData {
   invoiceNumber: string;
   status: string;
   lines: BillingLine[];
+  columnConfigs?: ColumnConfig[];
 }
 
 // Updated API functions
@@ -274,6 +284,18 @@ export default function UpdateInvoice() {
     type: "success" | "error";
   } | null>(null);
 
+  // Column configuration state
+  const [columns, setColumns] = useState<ColumnConfig[]>([
+    { key: "type", label: "Type", visible: true },
+    { key: "description", label: "Description", visible: true },
+    { key: "quantity", label: "Qty", visible: true },
+    { key: "unitPrice", label: "Unit Price", visible: true },
+    { key: "personnel", label: "Personnel", visible: false },
+    { key: "discount", label: "Discount %", visible: false },
+    { key: "tax", label: "Tax %", visible: false },
+    { key: "total", label: "Total", visible: true },
+  ]);
+
   // Fetch invoice data
   const { data: invoice, isLoading: isLoadingInvoice } = useQuery({
     queryKey: ["invoice", invoiceId],
@@ -322,6 +344,11 @@ export default function UpdateInvoice() {
       });
 
       setLines(invoice.lines || []);
+
+      // Set column configuration from invoice if available, otherwise use default
+      if (invoice.columnConfigs && invoice.columnConfigs.length > 0) {
+        setColumns(invoice.columnConfigs);
+      }
 
       // Set added mission IDs from existing lines
       const missionIds = [
@@ -415,6 +442,15 @@ export default function UpdateInvoice() {
     },
     []
   );
+
+  // Toggle column visibility
+  const toggleColumn = useCallback((columnKey: string) => {
+    setColumns((prev) =>
+      prev.map((col) =>
+        col.key === columnKey ? { ...col, visible: !col.visible } : col
+      )
+    );
+  }, []);
 
   // Add mission with all services
   const addMissionWithServices = useCallback(
@@ -651,6 +687,13 @@ export default function UpdateInvoice() {
         totalAfterDiscountBase: Number(line.totalAfterDiscountBase) || 0,
         taxPercent: line.taxPercent ? Number(line.taxPercent) : 0,
         taxAmountBase: line.taxAmountBase ? Number(line.taxAmountBase) : 0,
+      })),
+      // Include column configuration in the billing data
+      columnConfigs: columns.map((col, index) => ({
+        key: col.key,
+        label: col.label,
+        visible: col.visible,
+        order: index,
       })),
     };
 
@@ -908,14 +951,38 @@ export default function UpdateInvoice() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label>Invoice Lines ({lines.length} total lines)</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addCustomLine}
-              >
-                + Add Custom Line
-              </Button>
+              <div className="flex items-center gap-4">
+                {/* Column Selector */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Columns:</Label>
+                  <div className="flex gap-2">
+                    {columns.map((column) => (
+                      <div key={column.key} className="flex items-center gap-1">
+                        <Checkbox
+                          id={`column-${column.key}`}
+                          checked={column.visible}
+                          onChange={() => toggleColumn(column.key)}
+                        />
+                        <Label
+                          htmlFor={`column-${column.key}`}
+                          className="text-sm"
+                        >
+                          {column.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addCustomLine}
+                >
+                  + Add Custom Line
+                </Button>
+              </div>
             </div>
 
             {lines.length === 0 ? (
@@ -935,14 +1002,33 @@ export default function UpdateInvoice() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead>Qty</TableHead>
-                                  <TableHead>Unit Price</TableHead>
-                                  <TableHead>Personnel</TableHead>
-                                  <TableHead>Discount %</TableHead>
-                                  <TableHead>Tax %</TableHead>
-                                  <TableHead>Total</TableHead>
-                                  <TableHead>Action</TableHead>
+                                  {columns.find((col) => col.key === "type")
+                                    ?.visible && <TableHead>Type</TableHead>}
+                                  {columns.find(
+                                    (col) => col.key === "description"
+                                  )?.visible && (
+                                    <TableHead>Description</TableHead>
+                                  )}
+                                  {columns.find((col) => col.key === "quantity")
+                                    ?.visible && <TableHead>Qty</TableHead>}
+                                  {columns.find(
+                                    (col) => col.key === "unitPrice"
+                                  )?.visible && (
+                                    <TableHead>Unit Price</TableHead>
+                                  )}
+                                  {columns.find(
+                                    (col) => col.key === "personnel"
+                                  )?.visible && (
+                                    <TableHead>Personnel</TableHead>
+                                  )}
+                                  {columns.find((col) => col.key === "discount")
+                                    ?.visible && (
+                                    <TableHead>Discount %</TableHead>
+                                  )}
+                                  {columns.find((col) => col.key === "tax")
+                                    ?.visible && <TableHead>Tax %</TableHead>}
+                                  {columns.find((col) => col.key === "total")
+                                    ?.visible && <TableHead>Total</TableHead>}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -952,111 +1038,145 @@ export default function UpdateInvoice() {
                                   );
                                   return (
                                     <TableRow key={line.id}>
-                                      <TableCell>
-                                        <Input
-                                          value={line.description}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              description: e.target.value,
-                                            })
-                                          }
-                                          className="border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          value={line.quantity}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              quantity:
-                                                parseInt(e.target.value) || 1,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={line.unitPriceBase}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              unitPriceBase:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-24 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          value={line.personnelCount}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              personnelCount:
-                                                parseInt(e.target.value) || 1,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          max="100"
-                                          value={line.discountPercent || ""}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              discountPercent:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={line.taxPercent || ""}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              taxPercent:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                        />
-                                      </TableCell>
-                                      <TableCell className="font-medium">
-                                        $
-                                        {line.totalAfterDiscountBase.toFixed(2)}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Button
-                                          type="button"
-                                          variant="destructive"
-                                          size="sm"
-                                          onClick={() =>
-                                            removeLine(globalIndex)
-                                          }
-                                        >
-                                          Remove
-                                        </Button>
-                                      </TableCell>
+                                      {columns.find((col) => col.key === "type")
+                                        ?.visible && (
+                                        <TableCell>
+                                          <Badge
+                                            variant={
+                                              line.lineType === "MISSION"
+                                                ? "default"
+                                                : "secondary"
+                                            }
+                                          >
+                                            {line.lineType}
+                                          </Badge>
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "description"
+                                      )?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            value={line.description}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                description: e.target.value,
+                                              })
+                                            }
+                                            className="border-0 focus-visible:ring-1"
+                                            required
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "quantity"
+                                      )?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            min="1"
+                                            value={line.quantity}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                quantity:
+                                                  parseInt(e.target.value) || 1,
+                                              })
+                                            }
+                                            className="w-20 border-0 focus-visible:ring-1"
+                                            required
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "unitPrice"
+                                      )?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={line.unitPriceBase}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                unitPriceBase:
+                                                  parseFloat(e.target.value) ||
+                                                  0,
+                                              })
+                                            }
+                                            className="w-24 border-0 focus-visible:ring-1"
+                                            required
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "personnel"
+                                      )?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            min="1"
+                                            value={line.personnelCount}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                personnelCount:
+                                                  parseInt(e.target.value) || 1,
+                                              })
+                                            }
+                                            className="w-20 border-0 focus-visible:ring-1"
+                                            required
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "discount"
+                                      )?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="100"
+                                            value={line.discountPercent || ""}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                discountPercent:
+                                                  parseFloat(e.target.value) ||
+                                                  0,
+                                              })
+                                            }
+                                            className="w-20 border-0 focus-visible:ring-1"
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find((col) => col.key === "tax")
+                                        ?.visible && (
+                                        <TableCell>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={line.taxPercent || ""}
+                                            onChange={(e) =>
+                                              updateLine(globalIndex, {
+                                                taxPercent:
+                                                  parseFloat(e.target.value) ||
+                                                  0,
+                                              })
+                                            }
+                                            className="w-20 border-0 focus-visible:ring-1"
+                                          />
+                                        </TableCell>
+                                      )}
+                                      {columns.find(
+                                        (col) => col.key === "total"
+                                      )?.visible && (
+                                        <TableCell className="font-medium">
+                                          $
+                                          {line.totalAfterDiscountBase.toFixed(
+                                            2
+                                          )}
+                                        </TableCell>
+                                      )}
                                     </TableRow>
                                   );
                                 })}
@@ -1096,15 +1216,29 @@ export default function UpdateInvoice() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead>Qty</TableHead>
-                                <TableHead>Unit Price</TableHead>
-                                <TableHead>Personnel</TableHead>
-                                <TableHead>Discount %</TableHead>
-                                <TableHead>Tax %</TableHead>
-                                <TableHead>Total</TableHead>
-                                <TableHead>Action</TableHead>
+                                {columns.find((col) => col.key === "type")
+                                  ?.visible && <TableHead>Type</TableHead>}
+                                {columns.find(
+                                  (col) => col.key === "description"
+                                )?.visible && (
+                                  <TableHead>Description</TableHead>
+                                )}
+                                {columns.find((col) => col.key === "quantity")
+                                  ?.visible && <TableHead>Qty</TableHead>}
+                                {columns.find((col) => col.key === "unitPrice")
+                                  ?.visible && (
+                                  <TableHead>Unit Price</TableHead>
+                                )}
+                                {columns.find((col) => col.key === "personnel")
+                                  ?.visible && <TableHead>Personnel</TableHead>}
+                                {columns.find((col) => col.key === "discount")
+                                  ?.visible && (
+                                  <TableHead>Discount %</TableHead>
+                                )}
+                                {columns.find((col) => col.key === "tax")
+                                  ?.visible && <TableHead>Tax %</TableHead>}
+                                {columns.find((col) => col.key === "total")
+                                  ?.visible && <TableHead>Total</TableHead>}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1114,119 +1248,138 @@ export default function UpdateInvoice() {
                                 );
                                 return (
                                   <TableRow key={line.id}>
-                                    <TableCell>
-                                      <Badge
-                                        variant={
-                                          line.lineType === "MISSION"
-                                            ? "default"
-                                            : "secondary"
-                                        }
-                                      >
-                                        {line.lineType}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        value={line.description}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            description: e.target.value,
-                                          })
-                                        }
-                                        className="border-0 focus-visible:ring-1"
-                                        required
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        min="1"
-                                        value={line.quantity}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            quantity:
-                                              parseInt(e.target.value) || 1,
-                                          })
-                                        }
-                                        className="w-20 border-0 focus-visible:ring-1"
-                                        required
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        value={line.unitPriceBase}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            unitPriceBase:
-                                              parseFloat(e.target.value) || 0,
-                                          })
-                                        }
-                                        className="w-24 border-0 focus-visible:ring-1"
-                                        required
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        min="1"
-                                        value={line.personnelCount}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            personnelCount:
-                                              parseInt(e.target.value) || 1,
-                                          })
-                                        }
-                                        className="w-20 border-0 focus-visible:ring-1"
-                                        required
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        max="100"
-                                        value={line.discountPercent || ""}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            discountPercent:
-                                              parseFloat(e.target.value) || 0,
-                                          })
-                                        }
-                                        className="w-20 border-0 focus-visible:ring-1"
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        value={line.taxPercent || ""}
-                                        onChange={(e) =>
-                                          updateLine(globalIndex, {
-                                            taxPercent:
-                                              parseFloat(e.target.value) || 0,
-                                          })
-                                        }
-                                        className="w-20 border-0 focus-visible:ring-1"
-                                      />
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                      ${line.totalAfterDiscountBase}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Button
-                                        type="button"
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={() => removeLine(globalIndex)}
-                                      >
-                                        Remove
-                                      </Button>
-                                    </TableCell>
+                                    {columns.find((col) => col.key === "type")
+                                      ?.visible && (
+                                      <TableCell>
+                                        <Badge
+                                          variant={
+                                            line.lineType === "MISSION"
+                                              ? "default"
+                                              : "secondary"
+                                          }
+                                        >
+                                          {line.lineType}
+                                        </Badge>
+                                      </TableCell>
+                                    )}
+                                    {columns.find(
+                                      (col) => col.key === "description"
+                                    )?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          value={line.description}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              description: e.target.value,
+                                            })
+                                          }
+                                          className="border-0 focus-visible:ring-1"
+                                          required
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find(
+                                      (col) => col.key === "quantity"
+                                    )?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          value={line.quantity}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              quantity:
+                                                parseInt(e.target.value) || 1,
+                                            })
+                                          }
+                                          className="w-20 border-0 focus-visible:ring-1"
+                                          required
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find(
+                                      (col) => col.key === "unitPrice"
+                                    )?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={line.unitPriceBase}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              unitPriceBase:
+                                                parseFloat(e.target.value) || 0,
+                                            })
+                                          }
+                                          className="w-24 border-0 focus-visible:ring-1"
+                                          required
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find(
+                                      (col) => col.key === "personnel"
+                                    )?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          value={line.personnelCount}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              personnelCount:
+                                                parseInt(e.target.value) || 1,
+                                            })
+                                          }
+                                          className="w-20 border-0 focus-visible:ring-1"
+                                          required
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find(
+                                      (col) => col.key === "discount"
+                                    )?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          max="100"
+                                          value={line.discountPercent || ""}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              discountPercent:
+                                                parseFloat(e.target.value) || 0,
+                                            })
+                                          }
+                                          className="w-20 border-0 focus-visible:ring-1"
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find((col) => col.key === "tax")
+                                      ?.visible && (
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={line.taxPercent || ""}
+                                          onChange={(e) =>
+                                            updateLine(globalIndex, {
+                                              taxPercent:
+                                                parseFloat(e.target.value) || 0,
+                                            })
+                                          }
+                                          className="w-20 border-0 focus-visible:ring-1"
+                                        />
+                                      </TableCell>
+                                    )}
+                                    {columns.find((col) => col.key === "total")
+                                      ?.visible && (
+                                      <TableCell className="font-medium">
+                                        ${line.totalAfterDiscountBase}
+                                      </TableCell>
+                                    )}
                                   </TableRow>
                                 );
                               })}
