@@ -1,66 +1,56 @@
 services:
-  db:
+  postgres:
     image: postgres:15
-    container_name: oursys_db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: oursysdb
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
 
-  server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-      args:
-        NODE_ENV: production
+  backend:
+    build: ./server
+    env_file:
+      - .env
+    depends_on:
+      - postgres
     volumes:
       - ./server/uploads:/app/uploads
-    container_name: oursys_server
-    env_file:
-      - ./server/.env
-    depends_on:
-      db:
-        condition: service_healthy
-    command: sh -c "npx prisma db push && node dist/main.js"
-    ports:
-      - "3001:3001"
-    restart: always
+    restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: https://oursys-dev.site
-    container_name: oursys_frontend
+    build: ./frontend
     env_file:
-      - ./frontend/.env.production
-    ports:
-      - "3000:3000"
+      - .env
+    environment:
+      - PORT=3000  # FIXED: Proper list indent (2 spaces before -, 4 before PORT)
     depends_on:
-      - server
-    restart: always
+      - backend
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
   nginx:
-    image: nginx:latest
+    image: nginx:alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot
     depends_on:
-      - server
+      - backend
       - frontend
+    restart: unless-stopped
 
 volumes:
-  db_data:
+  postgres-data:

@@ -1,34 +1,29 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:18-alpine AS builder
+
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package*.json ./
 
-# Copy source
+RUN npm install
+
 COPY . .
 
-# Build-time env
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
-# Build Next.js app
 RUN npm run build
 
-# Stage 2: Production image
-FROM node:20-alpine
+FROM node:18-alpine AS runner
+
 WORKDIR /app
 
-# Add non-root user
-RUN addgroup -S nextgroup && adduser -S nextuser -G nextgroup
+ENV NODE_ENV=production
 
-# Copy built files
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
+COPY package*.json ./
+
+RUN npm install --only=production
+
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/next-env.d.ts ./next-env.d.ts
 
-USER nextuser
+# No public folder, so skipped
+
 EXPOSE 3000
-CMD ["npm", "start"]
+
+CMD ["npm", "run", "start"]
