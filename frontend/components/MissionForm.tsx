@@ -18,11 +18,11 @@ import api from "@/lib/api";
 
 // Temp placeholder for DatePicker if not implemented
 // You can replace with your actual DatePicker component
-const DatePicker = ({ date, setDate }: { date: Date | undefined; setDate: (date: Date | undefined) => void }) => (
+const DatePicker = ({ date, setDate }: { date: Date | null; setDate: (date: Date | null) => void }) => (
   <Input
     type="date"
     value={date ? format(date, "yyyy-MM-dd") : ""}
-    onChange={(e) => setDate(e.target.value ? new Date(e.target.value) : undefined)}
+    onChange={(e) => setDate(e.target.value ? new Date(e.target.value) : null)}
   />
 );
 
@@ -30,11 +30,17 @@ const DatePicker = ({ date, setDate }: { date: Date | undefined; setDate: (date:
 const missionSchema = z.object({
   contractId: z.number({ required_error: "Contract is required" }),
   siteId: z.number().optional(),
-  startDate: z.date({ required_error: "Start date is required" }),
-  endDate: z.date({ required_error: "End date is required" }),
+  startDate: z.date().nullable(),
+  endDate: z.date().nullable(),
   requiredPersonnel: z.number().min(0).optional(),
   managerId: z.number().optional(),
-}).refine((data) => data.endDate > data.startDate, {
+}).refine((data) => data.startDate !== null, {
+  message: "Start date is required",
+  path: ["startDate"],
+}).refine((data) => data.endDate !== null, {
+  message: "End date is required",
+  path: ["endDate"],
+}).refine((data) => data.startDate && data.endDate && data.endDate > data.startDate, {
   message: "End date must be after start date",
   path: ["endDate"],
 });
@@ -52,8 +58,8 @@ export default function MissionForm({ mission, onSuccess }: MissionFormProps) {
     defaultValues: {
       contractId: mission?.contractId,
       siteId: mission?.siteId,
-      startDate: mission?.startDate ? new Date(mission.startDate) : undefined,
-      endDate: mission?.endDate ? new Date(mission.endDate) : undefined,
+      startDate: mission?.startDate ? new Date(mission.startDate) : null,
+      endDate: mission?.endDate ? new Date(mission.endDate) : null,
       requiredPersonnel: mission?.requiredPersonnel ?? 0,
       managerId: mission?.managerId,
     },
@@ -73,8 +79,8 @@ export default function MissionForm({ mission, onSuccess }: MissionFormProps) {
       form.reset({
         contractId: undefined,
         siteId: undefined,
-        startDate: undefined,
-        endDate: undefined,
+        startDate: null,
+        endDate: null,
         requiredPersonnel: 0,
         managerId: undefined,
       });
@@ -110,8 +116,8 @@ export default function MissionForm({ mission, onSuccess }: MissionFormProps) {
     try {
       const payload = {
         ...data,
-        startDate: format(data.startDate, "yyyy-MM-dd"),
-        endDate: format(data.endDate, "yyyy-MM-dd"),
+        startDate: format(data.startDate!, "yyyy-MM-dd"),
+        endDate: format(data.endDate!, "yyyy-MM-dd"),
       };
       if (isEdit) {
         await api.put(`/missions/${mission.id}`, payload);
