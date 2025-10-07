@@ -15,21 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # optional: pgadmin if you want it, but DON'T expose it if Brooklyn already uses 8081
-  # Uncomment and change host port only if needed and unique
-  # pgadmin:
-  #   image: dpage/pgadmin4:7
-  #   container_name: oursys_pgadmin
-  #   restart: unless-stopped
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
-  #     PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-  #   # only expose if you need web UI and choose a free host port:
-  #   # ports:
-  #   #   - "8082:80"
-  #   volumes:
-  #   - ./pgadmin_data:/var/lib/pgadmin
-
   oursys_server:
     build:
       context: ./server
@@ -38,7 +23,7 @@ services:
     env_file:
       - ./server/.env
     environment:
-      - DATABASE_URL=${DATABASE_URL}   # set in top-level .env or server/.env
+      - DATABASE_URL=${DATABASE_URL}
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=postgres
@@ -64,7 +49,29 @@ services:
       - oursys_server
     restart: unless-stopped
 
-# No nginx here — we'll let Brooklyn nginx proxy to these by container name
+  nginx:
+    image: nginx:stable-alpine
+    container_name: oursys_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certbot:/var/www/certbot:rw
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - oursys_frontend
+      - oursys_server
+    networks:
+      - default
+
+# persistent volumes (your existing ones)
 volumes:
   pgdata:
   pgadmin_data:
+
+# networks (default is fine)
+networks:
+  default:
+    name: oursys_network

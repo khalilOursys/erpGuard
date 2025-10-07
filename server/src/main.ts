@@ -6,7 +6,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001','https://www.oursys-dev.site'], // Allow both frontend and backend
+    origin: ['http://localhost:3000', 'http://localhost:3001','https://www.oursys-dev.site','https://oursys-dev.site'], // Allow both frontend and backend
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
