@@ -2,76 +2,65 @@ services:
   db:
     image: postgres:15
     container_name: oursys_db
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: oursysdb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: oursysdb
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
 
-  oursys_server:
+  server:
     build:
       context: ./server
       dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    volumes:
+      - ./server/uploads:/app/uploads
     container_name: oursys_server
     env_file:
       - ./server/.env
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - PORT=3001
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./server/uploads:/usr/src/app/uploads
-    restart: unless-stopped
+    command: sh -c "npx prisma db push && node dist/main.js"
+    ports:
+      - "3001:3001"
+    restart: always
 
-  oursys_frontend:
+  frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://oursys-dev.site
     container_name: oursys_frontend
     env_file:
-      - ./frontend/.env.local
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
+      - ./frontend/.env.production
+    ports:
+      - "3000:3000"
     depends_on:
-      - oursys_server
-    restart: unless-stopped
-
+      - server
+    restart: always
   nginx:
-    image: nginx:stable-alpine
-    container_name: oursys_nginx
-    restart: unless-stopped
+    image: nginx:latest
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certbot:/var/www/certbot:rw
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot
     depends_on:
-      - oursys_frontend
-      - oursys_server
-    networks:
-      - default
+      - server
+      - frontend
 
-# persistent volumes (your existing ones)
 volumes:
-  pgdata:
-  pgadmin_data:
-
-# networks (default is fine)
-networks:
-  default:
-    name: oursys_network
+  db_data:

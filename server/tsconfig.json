@@ -21,9 +21,23 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "typeRoots": ["./src/types", "./node_modules/@types"]
+    "typeRoots": [
+      "./src/types",
+      "./node_modules/@types"
+    ]
   },
-  "types": ["node", "express", "multer"],
-  "include": ["src/**/*", "src/types/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "types": [
+    "node",
+    "express",
+    "multer"
+  ],
+  "include": [
+    "src/**/*",
+    "src/types/**/*",
+    "prisma/seed.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

@@ -1,60 +1,54 @@
-# -------------------------
-# Stage 1: builder (deps + build)
-# -------------------------
-FROM node:20-alpine AS builder
+# server/Dockerfile - production build with proper ownership + seed support
+FROM node:20-bullseye AS builder
+WORKDIR /app
 
-# Install build deps including postgres client used by wait scripts
-RUN apk add --no-cache bash git openssh build-base python3 postgresql-client
+# copy package files early to leverage cache
+COPY package*.json ./
 
-WORKDIR /usr/src/app
+# Install all deps (we need dev deps to compile seed and Nest)
+RUN npm ci --no-audit --no-fund
 
-# copy only package manifests first (leverage cache)
-COPY package.json package-lock.json ./
-
-# Install deps (full)
-RUN npm ci --silent
-
-# copy source
+# copy sources
 COPY . .
 
-# Prisma: generate client (so prisma client will be available at build time)
-RUN npm run prisma:generate || true
+# ensure folder for optional prisma runtime files exists so later COPY won't fail
+RUN mkdir -p .prisma
 
-# Build the project (Nest -> dist)
-RUN npm run build
+# generate prisma client (so types exist for build)
+RUN npx prisma generate
 
-# -------------------------
-# Stage 2: runtime (small)
-# -------------------------
-FROM node:20-alpine AS runner
+# build the app (Nest will emit dist/)
+RUN npx nest build
 
-# Install runtime tools (postgres client for health/wait)
-RUN apk add --no-cache bash postgresql-client
+# Compile prisma seed.ts to CommonJS in dist/prisma so node can run it:
+# Ensure server/tsconfig.json includes prisma/seed.ts in "include"
+RUN npx tsc prisma/seed.ts --module commonjs --outDir dist/prisma --target ES2019 --esModuleInterop --skipLibCheck
 
-# Create non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# --- final runtime image ---
+FROM node:20-bullseye AS runtime
+WORKDIR /app
 
-WORKDIR /usr/src/app
-ENV NODE_ENV=production
-ENV PORT=3001
+# create user to avoid permission issues
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-# Copy package.json and production node_modules from builder
-COPY --from=builder /usr/src/app/package.json ./package.json
-COPY --from=builder /usr/src/app/node_modules ./node_modules
+# copy built artifacts and package.json & node_modules from builder
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+# copy .prisma if present (we created it in builder to guarantee existence)
+COPY --from=builder /app/.prisma ./.prisma
 
-# Copy built files & prisma schema/client if required
-COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/prisma ./prisma
+# create uploads dir and make it writable by runtime user
+RUN mkdir -p /app/uploads /app/.prisma && \
+    chown -R appuser:appgroup /app/uploads /app/node_modules /app/dist /app/prisma /app/.prisma || true && \
+    chmod -R 0775 /app/uploads
 
-# Copy entrypoint
-COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# install tsconfig-paths (runtime module alias resolver)
+RUN npm install --no-audit --no-fund tsconfig-paths
 
-# Switch to non-root user
+# switch to non-root user
 USER appuser
 
-EXPOSE 3001
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3001/ || exit 1
-
-CMD ["bash", "/usr/local/bin/entrypoint.sh"]
+# default run
+CMD ["node", "-r", "tsconfig-paths/register", "dist/main.js"]

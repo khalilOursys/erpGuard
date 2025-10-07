@@ -1,6 +1,5 @@
 node_modules
 .git
-.env.local
 .next
 .vscode
 .DS_Store

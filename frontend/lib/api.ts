@@ -64,7 +64,7 @@ const api = {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const finalUrl = `${API_BASE}${url}`;
+    const finalUrl = `${API_BASE || ''}${url}`;
     console.log(`API Request: ${opts.method || 'GET'} ${finalUrl}`); // Debug log for easier troubleshooting
 
     const response = await fetch(finalUrl, {
