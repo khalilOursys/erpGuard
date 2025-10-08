@@ -165,7 +165,15 @@ const MissionAssignmentsPage = () => {
       /* const personnelResponse = await api.get(`/personnel?available=true`);
       const personnelData = await personnelResponse.json();
       setAvailablePersonnel(personnelData); */
-      setAvailablePersonnel(STATIC_PERSONNEL);
+      setAvailablePersonnel(
+        STATIC_PERSONNEL.map((person) => ({
+          id: person.id,
+          name: `${person.firstName} ${person.lastName}`,
+          email: person.email,
+          phone: person.phone || "", // Handle null phone
+          status: "active", // Default status
+        }))
+      );
     } catch (error) {
       console.error("Failed to fetch mission data:", error);
     } finally {
