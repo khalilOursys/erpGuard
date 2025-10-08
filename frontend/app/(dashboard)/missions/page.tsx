@@ -20,7 +20,13 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import api from "@/lib/api";
@@ -85,7 +91,8 @@ export default function MissionsPage() {
 
   // Permission check: Run ONLY on client-side
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
       router.push("/login");
       return;
@@ -216,12 +223,18 @@ export default function MissionsPage() {
     {
       accessorKey: "startDate",
       header: "Start Date",
-      cell: ({ row }) => row.original.startDate ? new Date(row.original.startDate).toLocaleDateString() : "N/A",
+      cell: ({ row }) =>
+        row.original.startDate
+          ? new Date(row.original.startDate).toLocaleDateString()
+          : "N/A",
     },
     {
       accessorKey: "endDate",
       header: "End Date",
-      cell: ({ row }) => row.original.endDate ? new Date(row.original.endDate).toLocaleDateString() : "N/A",
+      cell: ({ row }) =>
+        row.original.endDate
+          ? new Date(row.original.endDate).toLocaleDateString()
+          : "N/A",
     },
     {
       accessorKey: "requiredPersonnel",
@@ -274,14 +287,30 @@ export default function MissionsPage() {
               <DropdownMenuSeparator />
               {hasManagePermission && (
                 <>
-                  <DropdownMenuItem onClick={() => { setSelectedMission(mission); setIsAddOpen(true); }}>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedMission(mission);
+                      setIsAddOpen(true);
+                    }}
+                  >
                     Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(`/missions/assignment/${mission.id}`)
+                    }
+                  >
+                    Assignment
                   </DropdownMenuItem>
                   {/* Add Manage Assignments if needed in future */}
                   {mission.isDeleted ? (
-                    <DropdownMenuItem onClick={() => handleRestore(mission.id)}>Restore</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleRestore(mission.id)}>
+                      Restore
+                    </DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem onClick={() => handleDelete(mission.id)}>Delete</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDelete(mission.id)}>
+                      Delete
+                    </DropdownMenuItem>
                   )}
                 </>
               )}
@@ -302,12 +331,17 @@ export default function MissionsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">Missions</h1>
         {hasManagePermission && (
-          <Dialog open={isAddOpen} onOpenChange={(open) => {
-            setIsAddOpen(open);
-            if (!open) setSelectedMission(null);
-          }}>
+          <Dialog
+            open={isAddOpen}
+            onOpenChange={(open) => {
+              setIsAddOpen(open);
+              if (!open) setSelectedMission(null);
+            }}
+          >
             <DialogTrigger asChild>
-              <Button onClick={() => setSelectedMission(null)}>Add Mission</Button>
+              <Button onClick={() => setSelectedMission(null)}>
+                Add Mission
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <MissionForm
@@ -325,11 +359,21 @@ export default function MissionsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
         <div className="space-y-2">
           <Label htmlFor="search">Search</Label>
-          <Input id="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search missions..." />
+          <Input
+            id="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search missions..."
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="site">Site</Label>
-          <Select value={siteId?.toString() || "all"} onValueChange={(v) => setSiteId(v === "all" ? undefined : Number(v))}>
+          <Select
+            value={siteId?.toString() || "all"}
+            onValueChange={(v) =>
+              setSiteId(v === "all" ? undefined : Number(v))
+            }
+          >
             <SelectTrigger>
               <SelectValue placeholder="All Sites" />
             </SelectTrigger>
@@ -362,7 +406,11 @@ export default function MissionsPage() {
           />
         </div>
         <div className="flex items-end space-x-2">
-          <Switch id="deletedOnly" checked={deletedOnly} onCheckedChange={setDeletedOnly} />
+          <Switch
+            id="deletedOnly"
+            checked={deletedOnly}
+            onCheckedChange={setDeletedOnly}
+          />
           <Label htmlFor="deletedOnly">Show Deleted Only</Label>
         </div>
       </div>

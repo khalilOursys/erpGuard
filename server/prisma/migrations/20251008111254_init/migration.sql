@@ -23,7 +23,7 @@ CREATE TYPE "public"."ReplacementType" AS ENUM ('PLANNED', 'EMERGENCY');
 CREATE TYPE "public"."BillingStatus" AS ENUM ('DRAFT', 'PENDING', 'PAID', 'OVERDUE', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "public"."BillingLineType" AS ENUM ('SERVICE', 'PERSONNEL', 'CUSTOM');
+CREATE TYPE "public"."BillingLineType" AS ENUM ('SERVICE', 'PERSONNEL', 'MISSION', 'CUSTOM');
 
 -- CreateEnum
 CREATE TYPE "public"."RateSource" AS ENUM ('MANUAL', 'API');

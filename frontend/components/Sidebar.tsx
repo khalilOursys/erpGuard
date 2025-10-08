@@ -22,6 +22,9 @@ import {
   Wrench,
   UserCircle,
   ClipboardList,
+  Target,
+  Building,
+  FileCheck,
 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -68,7 +71,41 @@ export default function Sidebar() {
             {!collapsed && "Dashboard"}
           </Button>
         </Link>
-        <Accordion type="single" collapsible className="w-full">
+
+        {/* Missions Section */}
+        <Link href="/missions">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <Target className="mr-2 h-4 w-4" />
+            {!collapsed && "Missions"}
+          </Button>
+        </Link>
+
+        {/* Clients Section */}
+        <Link href="/clients">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <Building className="mr-2 h-4 w-4" />
+            {!collapsed && "Clients"}
+          </Button>
+        </Link>
+
+        {/* Contracts Section */}
+        <Link href="/contracts">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <FileCheck className="mr-2 h-4 w-4" />
+            {!collapsed && "Contracts"}
+          </Button>
+        </Link>
+
+        {/* <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="inventory">
             <AccordionTrigger
               className={`py-2 ${
@@ -165,34 +202,8 @@ export default function Sidebar() {
               )}
             </AccordionContent>
           </AccordionItem>
-        </Accordion>
-        <Link href="/company">
-          <Button
-            variant="ghost"
-            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            {!collapsed && "Settings"}
-          </Button>
-        </Link>
-        <Link href="/users">
-          <Button
-            variant="ghost"
-            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
-          >
-            <Users className="mr-2 h-4 w-4" />
-            {!collapsed && "Users"}
-          </Button>
-        </Link>
-        <Link href="/services">
-          <Button
-            variant="ghost"
-            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
-          >
-            <Wrench className="mr-2 h-4 w-4" />
-            {!collapsed && "Services"}
-          </Button>
-        </Link>
+        </Accordion> */}
+
         <Link href="/personnel">
           <Button
             variant="ghost"
@@ -202,6 +213,17 @@ export default function Sidebar() {
             {!collapsed && "Personnel"}
           </Button>
         </Link>
+
+        <Link href="/services">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <Wrench className="mr-2 h-4 w-4" />
+            {!collapsed && "Services"}
+          </Button>
+        </Link>
+
         <Link href="/invoices">
           <Button
             variant="ghost"
@@ -211,6 +233,27 @@ export default function Sidebar() {
             {!collapsed && "Invoices"}
           </Button>
         </Link>
+
+        <Link href="/users">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <Users className="mr-2 h-4 w-4" />
+            {!collapsed && "Users"}
+          </Button>
+        </Link>
+
+        <Link href="/company">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            {!collapsed && "Settings"}
+          </Button>
+        </Link>
+
         <Button
           variant="ghost"
           className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
@@ -218,6 +261,7 @@ export default function Sidebar() {
           <FileText className="mr-2 h-4 w-4" />
           {!collapsed && "Documents"}
         </Button>
+
         <Button
           variant="ghost"
           className={`w-full justify-start ${collapsed ? "px-2" : ""}`}

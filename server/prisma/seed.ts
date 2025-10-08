@@ -1,6 +1,6 @@
 // prisma/seed.ts
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -224,6 +224,8 @@ async function main() {
   let adminUser = await prisma.user.findUnique({
     where: { identifier: adminIdentifier },
   });
+  console.log(adminPassword);
+
   if (!adminUser) {
     const hash = await bcrypt.hash(adminPassword, 10);
     adminUser = await prisma.user.create({

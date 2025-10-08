@@ -1,10 +1,5 @@
 // src/modules/locations/locations.controller.ts
-import {
-  Controller,
-  Get,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { LocationsService } from './locations.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PermissionsGuard } from 'src/common/guards/permissions.guard';
