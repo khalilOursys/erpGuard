@@ -62,7 +62,7 @@ export default function Sidebar() {
         </Button>
       </div>
       <nav className="space-y-2 flex-1">
-        <Link href="/">
+        {/* <Link href="/">
           <Button
             variant="ghost"
             className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
@@ -70,7 +70,7 @@ export default function Sidebar() {
             <LayoutDashboard className="mr-2 h-4 w-4" />
             {!collapsed && "Dashboard"}
           </Button>
-        </Link>
+        </Link> */}
 
         {/* Missions Section */}
         <Link href="/missions">
