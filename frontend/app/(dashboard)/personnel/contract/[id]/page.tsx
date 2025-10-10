@@ -125,19 +125,20 @@ export default function ContractsTable({ params }: PageProps) {
   } = useQuery<Personnel>({
     queryKey: ["personnel", id],
     queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`/api/personnels/${id}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.get(`/personnels/${id}`);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch personnel");
+      // Check if response contains data property (common pattern)
+      if (response.data) {
+        return response.data;
       }
-      return response.json();
+
+      // If response is already the data, return it directly
+      if (response.id || response.name) {
+        // Adjust based on your Personnel interface
+        return response;
+      }
+
+      throw new Error("Failed to fetch personnel - invalid response structure");
     },
   });
 
@@ -352,6 +353,8 @@ export default function ContractsTable({ params }: PageProps) {
 
   // Handle errors
   useEffect(() => {
+    console.log("useEffect", personnelError);
+
     if (personnelError) {
       toast.error("Failed to fetch personnel details");
     }

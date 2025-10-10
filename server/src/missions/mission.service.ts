@@ -238,6 +238,7 @@ export class MissionService {
     if (!personnel || personnel.companyId !== companyId)
       throw new BadRequestException('Personnel not found');
 
+    // Create the assignment
     const assignment = await this.prisma.missionAssignment.create({
       data: {
         missionId,
@@ -248,7 +249,50 @@ export class MissionService {
       },
     });
 
+    // If isReplacement is false, create default attendance records
+    if (!dto.isReplacement) {
+      await this.createDefaultAttendanceRecords(
+        assignment.id,
+        mission,
+        dto.personnelId,
+      );
+    }
+
     return assignment;
+  }
+
+  private async createDefaultAttendanceRecords(
+    assignmentId: number,
+    mission: any,
+    personnelId: number,
+  ) {
+    const startDate = new Date(mission.startDate);
+    const endDate = new Date(mission.endDate);
+
+    // Generate all dates between start and end date
+    const dates: Date[] = [];
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Create attendance records for each date
+    const attendancePromises = dates.map((date) =>
+      this.prisma.attendance.create({
+        data: {
+          assignmentId,
+          personnelId,
+          date: date,
+          status: 'PRESENT', // Default status
+          // checkIn and checkOut can be null initially
+          // replacementForId and replacementType remain null for default records
+        },
+      }),
+    );
+
+    await Promise.all(attendancePromises);
   }
 
   async listAssignments(companyId: number, missionId: number) {

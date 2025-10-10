@@ -66,6 +66,7 @@ interface Mission {
   endDate: string;
   requiredPersonnel: number;
   assignments: Assignment[];
+  requirements: any[];
   contract: {
     contractNumber: string;
     client: {
@@ -162,10 +163,13 @@ const MissionAssignmentsPage = () => {
       setAssignments(assignmentsData);
 
       // Fetch available personnel
-      /* const personnelResponse = await api.get(`/personnel?available=true`);
-      const personnelData = await personnelResponse.json();
-      setAvailablePersonnel(personnelData); */
-      setAvailablePersonnel(
+      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const companyId = storedUser.companyId;
+      const personnelData = await api.get(
+        `/personnels/findAllPersonnels?companyId=` + companyId
+      );
+      setAvailablePersonnel(personnelData);
+      /* setAvailablePersonnel(
         STATIC_PERSONNEL.map((person) => ({
           id: person.id,
           name: `${person.firstName} ${person.lastName}`,
@@ -173,7 +177,7 @@ const MissionAssignmentsPage = () => {
           phone: person.phone || "", // Handle null phone
           status: "active", // Default status
         }))
-      );
+      ); */
     } catch (error) {
       console.error("Failed to fetch mission data:", error);
     } finally {
@@ -182,8 +186,6 @@ const MissionAssignmentsPage = () => {
   };
 
   useEffect(() => {
-    console.log(missionId);
-
     if (missionId) {
       fetchMissionData();
     }
@@ -198,7 +200,14 @@ const MissionAssignmentsPage = () => {
 
     setSaving(true);
     try {
-      await api.post(`/missions/${missionId}/assignments`);
+      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const companyId = storedUser.companyId;
+
+      if (!companyId) {
+        throw new Error("Company ID not found. Please log in again.");
+      }
+      const payload = { ...newAssignment, companyId };
+      await api.post(`/missions/${missionId}/assignments`, payload);
 
       setAddAssignmentModalOpen(false);
       setNewAssignment({
@@ -574,10 +583,15 @@ const MissionAssignmentsPage = () => {
               fullWidth
             >
               <MenuItem value="">Select Post</MenuItem>
-              <MenuItem value="Security Guard">Security Guard</MenuItem>
-              <MenuItem value="Supervisor">Supervisor</MenuItem>
-              <MenuItem value="Team Leader">Team Leader</MenuItem>
-              <MenuItem value="Patrol Officer">Patrol Officer</MenuItem>
+              {mission?.requirements?.map((requirement) => (
+                <MenuItem
+                  key={requirement.serviceId}
+                  value={requirement.service.name}
+                >
+                  {requirement.service.name} ({requirement.requiredCount}
+                  required)
+                </MenuItem>
+              ))}
             </TextField>
 
             <TextField
