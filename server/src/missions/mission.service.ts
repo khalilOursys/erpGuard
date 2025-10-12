@@ -260,39 +260,70 @@ export class MissionService {
 
     return assignment;
   }
-
   private async createDefaultAttendanceRecords(
     assignmentId: number,
-    mission: any,
+    mission: { startDate: string | Date; endDate: string | Date },
     personnelId: number,
-  ) {
-    const startDate = new Date(mission.startDate);
-    const endDate = new Date(mission.endDate);
+  ): Promise<void> {
+    try {
+      // Parse dates manually to avoid timezone issues
+      const parseDate = (dateInput: string | Date): Date => {
+        const date = new Date(dateInput);
+        return new Date(
+          Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+          ),
+        );
+      };
 
-    // Generate all dates between start and end date
-    const dates: Date[] = [];
-    const currentDate = new Date(startDate);
+      const startDate = parseDate(mission.startDate);
+      const endDate = parseDate(mission.endDate);
 
-    while (currentDate <= endDate) {
-      dates.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
+      // Validate dates
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        throw new Error('Invalid start or end date');
+      }
+
+      if (startDate > endDate) {
+        throw new Error('Start date cannot be after end date');
+      }
+
+      // Generate dates (inclusive of both start and end)
+      const dates: Date[] = [];
+      const currentDate = new Date(startDate);
+      const finalEndDate = new Date(endDate);
+
+      while (currentDate <= finalEndDate) {
+        dates.push(new Date(currentDate));
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+
+      console.log(
+        'Dates to be inserted:',
+        dates.map((d) => d.toISOString()),
+      );
+
+      // Create attendance records
+      const attendancePromises = dates.map((date) =>
+        this.prisma.attendance.create({
+          data: {
+            assignmentId,
+            personnelId,
+            date: date,
+            status: 'PRESENT',
+          },
+        }),
+      );
+
+      await Promise.all(attendancePromises);
+
+      console.log(`Successfully created ${dates.length} attendance records`);
+    } catch (error) {
+      console.error('Error creating default attendance records:', error);
+      throw error;
     }
-
-    // Create attendance records for each date
-    const attendancePromises = dates.map((date) =>
-      this.prisma.attendance.create({
-        data: {
-          assignmentId,
-          personnelId,
-          date: date,
-          status: 'PRESENT', // Default status
-          // checkIn and checkOut can be null initially
-          // replacementForId and replacementType remain null for default records
-        },
-      }),
-    );
-
-    await Promise.all(attendancePromises);
   }
 
   async listAssignments(companyId: number, missionId: number) {
