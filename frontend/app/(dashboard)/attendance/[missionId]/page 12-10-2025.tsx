@@ -44,15 +44,13 @@ interface AttendanceRecord {
   checkIn?: string;
   checkOut?: string;
   personnelNameR?: string;
-  post: string;
 }
 
 interface AgentData {
-  id: number | string;
+  id: number;
   name: string;
   personnelId: number;
   assignmentId: number;
-  post: string;
   [key: string]: string | number | null;
 }
 
@@ -154,6 +152,7 @@ const fetchAvailablePersonnel = async (
   }
 };
 
+// CORRECTED: createReplacement function to match backend API
 const createReplacement = async (
   missionId: number,
   companyId: number,
@@ -162,7 +161,6 @@ const createReplacement = async (
     startDate: string;
     endDate: string;
     replacementForId?: number;
-    replacementPersonnelId?: number;
   }
 ): Promise<any> => {
   try {
@@ -177,65 +175,7 @@ const createReplacement = async (
   }
 };
 
-// Helper functions
-const mapStatusToFullName = (status: string): string => {
-  switch (status) {
-    case "PRESENT":
-      return "Present";
-    case "ABSENT":
-      return "Absent";
-    case "TIME_OFF":
-      return "Time Off";
-    case "JUSTIFIED_ABSENCE":
-      return "Justified Absence";
-    case "REPLACEMENT":
-      return "Replacement";
-    case "EXTRA_TIME":
-      return "Extra Time";
-    default:
-      return "Present";
-  }
-};
-
-const mapFullNameToCode = (fullName: string): string => {
-  switch (fullName) {
-    case "Present":
-      return "P";
-    case "Absent":
-      return "A";
-    case "Time Off":
-      return "TO";
-    case "Justified Absence":
-      return "JA";
-    case "Replacement":
-      return "R";
-    case "Extra Time":
-      return "ET";
-    default:
-      return "P";
-  }
-};
-
-const mapDisplayToStatus = (display: string): string => {
-  switch (display) {
-    case "P":
-      return "PRESENT";
-    case "A":
-      return "ABSENT";
-    case "TO":
-      return "TIME_OFF";
-    case "JA":
-      return "JUSTIFIED_ABSENCE";
-    case "R":
-      return "REPLACEMENT";
-    case "ET":
-      return "EXTRA_TIME";
-    default:
-      return "PRESENT";
-  }
-};
-
-// Replacement Modal Component
+// CORRECTED: Replacement Modal Component
 const ReplacementModal = ({
   open,
   onClose,
@@ -252,7 +192,6 @@ const ReplacementModal = ({
     startDate: string;
     endDate: string;
     replacementForId?: number;
-    replacementPersonnelId?: number;
   }) => void;
   originalAgent: { id: number; name: string; assignmentId: number } | null;
   selectedDate: string;
@@ -278,9 +217,8 @@ const ReplacementModal = ({
     }
   }, [open, originalAgent, selectedDate]);
 
-  const getAssignmentIdForOriginalPersonnel = (
-    personnelId: number
-  ): number | null => {
+  // Get assignment ID for replacement personnel
+  const getAssignmentIdForPersonnel = (personnelId: number): number | null => {
     const agent = tableData.find((a) => a.personnelId === personnelId);
     return agent?.assignmentId || null;
   };
@@ -299,20 +237,13 @@ const ReplacementModal = ({
   };
 
   const handleConfirm = () => {
-    console.log(selectedReplacementId, selectedReplacementForId);
-
-    if (
-      selectedReplacementId &&
-      startDate &&
-      endDate &&
-      selectedReplacementForId
-    ) {
-      const originalAssignmentId = getAssignmentIdForOriginalPersonnel(
+    if (selectedReplacementId && startDate && endDate) {
+      const assignmentId = getAssignmentIdForPersonnel(
         selectedReplacementForId
       );
 
-      if (!originalAssignmentId) {
-        toast.error("Selected personnel to replace has no assignment");
+      if (!assignmentId) {
+        toast.error("Selected replacement personnel has no assignment");
         return;
       }
 
@@ -328,20 +259,18 @@ const ReplacementModal = ({
         return;
       }
 
+      // CORRECTED: Send the payload structure that matches backend API
       const replacementData = {
-        assignmentId: originalAssignmentId,
+        assignmentId,
         startDate,
         endDate,
-        replacementForId: selectedReplacementForId,
-        replacementPersonnelId: selectedReplacementId,
+        replacementForId:
+          selectedReplacementForId > 0 ? selectedReplacementForId : undefined,
       };
 
-      console.log("Sending replacement data:", replacementData);
       onConfirm(replacementData);
     } else {
-      toast.error(
-        "Please select both personnel to replace and replacement personnel, and date range"
-      );
+      toast.error("Please select replacement personnel and date range");
     }
   };
 
@@ -430,27 +359,20 @@ const ReplacementModal = ({
             />
           </Box>
 
-          {startDate &&
-            endDate &&
-            selectedReplacementForId &&
-            selectedReplacementId && (
-              <Alert severity="warning">
-                This will set replacement status for{" "}
-                {dayjs(endDate).diff(dayjs(startDate), "day") + 1} days from{" "}
-                {dayjs(startDate).format("MMM D, YYYY")} to{" "}
-                {dayjs(endDate).format("MMM D, YYYY")}
-                <br />
-                <strong>Replacing:</strong> {getReplacementForName()} (ID:{" "}
-                {selectedReplacementForId})
-                <br />
-                <strong>With:</strong>{" "}
-                {
-                  availablePersonnel.find((p) => p.id === selectedReplacementId)
-                    ?.name
-                }{" "}
-                (ID: {selectedReplacementId})
-              </Alert>
-            )}
+          {startDate && endDate && (
+            <Alert severity="warning">
+              This will set replacement status for{" "}
+              {dayjs(endDate).diff(dayjs(startDate), "day") + 1} days from{" "}
+              {dayjs(startDate).format("MMM D, YYYY")} to{" "}
+              {dayjs(endDate).format("MMM D, YYYY")}
+              {selectedReplacementForId > 0 && (
+                <>
+                  {" "}
+                  for <strong>{getReplacementForName()}</strong>
+                </>
+              )}
+            </Alert>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>
@@ -458,12 +380,7 @@ const ReplacementModal = ({
         <Button
           onClick={handleConfirm}
           variant="contained"
-          disabled={
-            !selectedReplacementId ||
-            !startDate ||
-            !endDate ||
-            !selectedReplacementForId
-          }
+          disabled={!selectedReplacementId || !startDate || !endDate}
         >
           Assign Replacement
         </Button>
@@ -579,14 +496,13 @@ const AttendancePage = () => {
     },
   });
 
-  // Replacement creation mutation
+  // CORRECTED: Replacement creation mutation
   const createReplacementMutation = useMutation({
     mutationFn: (replacementData: {
       assignmentId: number;
       startDate: string;
       endDate: string;
       replacementForId?: number;
-      replacementPersonnelId?: number;
     }) => {
       if (!missionId || !companyId) {
         throw new Error("Missing required data");
@@ -613,142 +529,77 @@ const AttendancePage = () => {
     },
   });
 
-  // Get color based on status
-  const getStatusColor = (status: string | null) => {
-    // If status contains replacement text, treat it as REPLACEMENT
-    const statusCode =
-      status && status.includes("replaces")
-        ? "R"
-        : status
-        ? mapFullNameToCode(status)
-        : null;
-
-    switch (statusCode) {
-      case "P":
-        return { backgroundColor: "#d1fae5", color: "#065f46" }; // Green
-      case "A":
-        return { backgroundColor: "#fee2e2", color: "#991b1b" }; // Red
-      case "R":
-        return { backgroundColor: "#fef3c7", color: "#92400e" }; // Yellow/Orange
-      case "TO":
-        return { backgroundColor: "#e0e7ff", color: "#3730a3" }; // Blue
-      case "JA":
-        return { backgroundColor: "#ddd6fe", color: "#5b21b6" }; // Purple
-      case "ET":
-        return { backgroundColor: "#fce7f3", color: "#9d174d" }; // Pink
+  // Map BE status to FE display values
+  const mapStatusToDisplay = (status: string): string => {
+    switch (status) {
+      case "PRESENT":
+      case "EXTRA_TIME":
+        return "P";
+      case "ABSENT":
+        return "A";
+      case "TIME_OFF":
+      case "JUSTIFIED_ABSENCE":
+        return "L";
+      case "REPLACEMENT":
+        return "R";
       default:
-        return { backgroundColor: "#f9fafb", color: "#6b7280" }; // Gray
+        return "P";
     }
   };
 
-  // Transform BE data to FE table format - SHOW ALL PERSONNEL
+  // Map FE display to BE status
+  const mapDisplayToStatus = (display: string): string => {
+    switch (display) {
+      case "R":
+        return "REPLACEMENT";
+      case "P":
+        return "PRESENT";
+      case "A":
+        return "ABSENT";
+      case "L":
+        return "TIME_OFF";
+      default:
+        return "PRESENT";
+    }
+  };
+
+  // Transform BE data to FE table format
   const tableData = useMemo((): AgentData[] => {
     if (!attendanceData.length) {
       return [];
     }
 
-    const personnelMap = new Map<string, AgentData>();
+    const personnelMap = new Map<number, AgentData>();
+
+    attendanceData.forEach((record) => {
+      if (!personnelMap.has(record.personnelId)) {
+        personnelMap.set(record.personnelId, {
+          id: record.personnelId,
+          name: record.personnelName,
+          personnelId: record.personnelId,
+          assignmentId: record.assignmentId,
+        });
+      }
+
+      const agent = personnelMap.get(record.personnelId)!;
+      const dayNumber = dayjs(record.date).date();
+      const dayKey = `day${dayNumber}`;
+
+      const updateKey = `${record.personnelId}-${dayNumber}`;
+      if (localUpdates.has(updateKey)) {
+        agent[dayKey] = localUpdates.get(updateKey) as string | null;
+      } else {
+        agent[dayKey] = mapStatusToDisplay(record.status);
+      }
+    });
+
+    // Fill all days for the current month
     const daysInMonth = currentMonth.daysInMonth();
-
-    // Get all unique personnel from the data - use only personnelId as key
-    const allPersonnel = new Map<
-      number,
-      { name: string; assignmentId: number; post: string }
-    >();
-
-    attendanceData.forEach((record) => {
-      allPersonnel.set(record.personnelId, {
-        name: record.personnelName,
-        assignmentId: record.assignmentId,
-        post: record.post || "",
-      });
-    });
-
-    // Initialize all personnel with all days set to null - use personnelId as unique key
-    allPersonnel.forEach((personnel, personnelId) => {
-      const uniqueKey = `${personnelId}`; // Only use personnelId to show each agent individually
-
-      personnelMap.set(uniqueKey, {
-        id: uniqueKey,
-        name: personnel.name,
-        personnelId: personnelId,
-        assignmentId: personnel.assignmentId,
-        post: personnel.post,
-        // Initialize all days to null
-        ...Object.fromEntries(
-          Array.from({ length: daysInMonth }, (_, i) => [`day${i + 1}`, null])
-        ),
-      });
-    });
-
-    // Create a map to track processed dates (ignoring time)
-    const processedDates = new Set<string>();
-
-    // Define priority with index signature to allow string indexing
-    const priority: { [key: string]: number } = {
-      REPLACEMENT: 5,
-      ABSENT: 6,
-      PRESENT: 4,
-      TIME_OFF: 3,
-      JUSTIFIED_ABSENCE: 2,
-      EXTRA_TIME: 1,
-    };
-
-    // Populate attendance data - handle multiple records per day
-    attendanceData.forEach((record) => {
-      const uniqueKey = `${record.personnelId}`; // Only use personnelId
-      const agent = personnelMap.get(uniqueKey);
-
-      if (agent) {
-        // Use only the date part (ignore time)
-        const dateOnly = dayjs(record.date).startOf("day").format("YYYY-MM-DD");
-        const dateKey = `${uniqueKey}-${dateOnly}`;
-
-        // Skip if we've already processed this date for this personnel
-        if (processedDates.has(dateKey)) {
-          return;
-        }
-
-        const dayNumber = dayjs(record.date).date();
-        const dayKey = `day${dayNumber}`;
-
-        const updateKey = `${uniqueKey}-${dayNumber}`;
-
-        if (localUpdates.has(updateKey)) {
-          agent[dayKey] = localUpdates.get(updateKey) as string | null;
-        } else {
-          // Find all records for this personnel on this date (ignoring time)
-          const sameDayRecords = attendanceData.filter(
-            (r) =>
-              r.personnelId === record.personnelId &&
-              dayjs(r.date).isSame(record.date, "day")
-          );
-
-          // Determine the highest priority status
-          let finalStatus = "PRESENT";
-          let replacementInfo = "";
-
-          sameDayRecords.forEach((r) => {
-            const recordPriority = priority[r.status] || 0;
-            const currentPriority = priority[finalStatus] || 0;
-            if (recordPriority > currentPriority) {
-              finalStatus = r.status;
-            }
-
-            // If this is a REPLACEMENT record and has personnelNameR, store replacement info
-            if (r.status === "REPLACEMENT" && r.personnelNameR) {
-              replacementInfo = `${r.personnelName} replaces ${r.personnelNameR}`;
-            }
-          });
-
-          // If we have replacement info and the final status is REPLACEMENT, include it
-          if (finalStatus === "REPLACEMENT" && replacementInfo) {
-            agent[dayKey] = replacementInfo;
-          } else {
-            agent[dayKey] = mapStatusToFullName(finalStatus);
-          }
-
-          processedDates.add(dateKey);
+    personnelMap.forEach((agent) => {
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayKey = `day${day}`;
+        if (!agent[dayKey]) {
+          agent[dayKey] = null;
         }
       }
     });
@@ -756,20 +607,26 @@ const AttendancePage = () => {
     return Array.from(personnelMap.values());
   }, [attendanceData, localUpdates, currentMonth]);
 
+  // Get color based on status
+  const getStatusColor = (status: string | null) => {
+    switch (status) {
+      case "P":
+        return { backgroundColor: "#d1fae5", color: "#065f46" };
+      case "A":
+        return { backgroundColor: "#fee2e2", color: "#991b1b" };
+      case "R":
+        return { backgroundColor: "#fef3c7", color: "#92400e" };
+      case "L":
+        return { backgroundColor: "#e0e7ff", color: "#3730a3" };
+      default:
+        return { backgroundColor: "#f9fafb", color: "#6b7280" };
+    }
+  };
+
   // Enhanced StatusCell with context menu
   const StatusCell = ({ cell }: { cell: MRT_Cell<AgentData> }) => {
     const value = cell.getValue<string | null>();
     const colors = getStatusColor(value);
-
-    // Check if value contains replacement text (contains "replaces")
-    const isReplacementText = value && value.includes("replaces");
-
-    // For replacement text, show "R" but keep the full text in tooltip
-    const displayValue = isReplacementText
-      ? "R"
-      : value
-      ? mapFullNameToCode(value)
-      : "-";
 
     const handleContextMenu = (event: React.MouseEvent) => {
       event.preventDefault();
@@ -795,9 +652,8 @@ const AttendancePage = () => {
           ...colors,
         }}
         onContextMenu={handleContextMenu}
-        title={value || "No status"} // Show full replacement text or status on hover
       >
-        {displayValue}
+        {value || "-"}
       </div>
     );
   };
@@ -834,12 +690,10 @@ const AttendancePage = () => {
         autoFocus
       >
         <option value="">-</option>
-        <option value="Present">Present</option>
-        <option value="Absent">Absent</option>
-        <option value="Time Off">Time Off</option>
-        <option value="Justified Absence">Justified Absence</option>
-        <option value="Replacement">Replacement</option>
-        <option value="Extra Time">Extra Time</option>
+        <option value="P">Present</option>
+        <option value="A">Absent</option>
+        <option value="L">Leave</option>
+        <option value="R">Replacement</option>
       </select>
     );
   };
@@ -850,14 +704,6 @@ const AttendancePage = () => {
         accessorKey: "name",
         header: "Agent Name",
         size: 180,
-        enableEditing: false,
-        muiTableHeadCellProps: { align: "center" as const },
-        muiTableBodyCellProps: { align: "center" as const },
-      },
-      {
-        accessorKey: "post",
-        header: "Post",
-        size: 120,
         enableEditing: false,
         muiTableHeadCellProps: { align: "center" as const },
         muiTableBodyCellProps: { align: "center" as const },
@@ -910,7 +756,7 @@ const AttendancePage = () => {
           {
             attendanceId: originalRecord.id,
             data: {
-              status: mapDisplayToStatus(mapFullNameToCode(value || "Present")),
+              status: mapDisplayToStatus(value || "P"),
             },
           },
         ],
@@ -957,13 +803,12 @@ const AttendancePage = () => {
     setReplacementModalOpen(true);
   };
 
-  // Handle replacement confirmation
+  // CORRECTED: Handle replacement confirmation
   const handleReplacementConfirm = (replacementData: {
     assignmentId: number;
     startDate: string;
     endDate: string;
     replacementForId?: number;
-    replacementPersonnelId?: number;
   }) => {
     createReplacementMutation.mutate(replacementData);
   };
@@ -1058,7 +903,7 @@ const AttendancePage = () => {
         </div>
       )}
 
-      <div className="mb-4 flex gap-4 flex-wrap">
+      <div className="mb-4 flex gap-4">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
           <span className="text-sm">P: Present</span>
@@ -1073,15 +918,7 @@ const AttendancePage = () => {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-          <span className="text-sm">TO: Time Off</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-purple-100 border border-purple-300 rounded"></div>
-          <span className="text-sm">JA: Justified Absence</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-pink-100 border border-pink-300 rounded"></div>
-          <span className="text-sm">ET: Extra Time</span>
+          <span className="text-sm">L: Leave/Time Off</span>
         </div>
       </div>
 

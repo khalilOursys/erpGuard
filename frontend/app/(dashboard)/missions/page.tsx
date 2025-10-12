@@ -302,6 +302,11 @@ export default function MissionsPage() {
                   >
                     Assignment
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/attendance/${mission.id}`)}
+                  >
+                    Attendance
+                  </DropdownMenuItem>
                   {/* Add Manage Assignments if needed in future */}
                   {mission.isDeleted ? (
                     <DropdownMenuItem onClick={() => handleRestore(mission.id)}>

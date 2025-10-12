@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
@@ -21,10 +22,15 @@ export class AttendanceController {
 
   @Get()
   async getAttendanceByMission(
-    @Param('missionId') missionId: number,
-    @Query('companyId') companyId: number,
+    @Param('missionId', ParseIntPipe) missionId: number,
+    @Query('companyId', ParseIntPipe) companyId: number,
+    @Query('date') date?: string,
   ) {
-    return this.attendanceService.getAttendanceByMission(missionId, companyId);
+    return this.attendanceService.getAttendanceByMission(
+      missionId,
+      companyId,
+      date,
+    );
   }
 
   @Get('summary')
@@ -84,5 +90,35 @@ export class AttendanceController {
     @Query('companyId') companyId: number,
   ) {
     return this.attendanceService.deleteAttendance(attendanceId, companyId);
+  }
+
+  @Post('replacements')
+  async createReplacement(
+    @Param('missionId') missionId: number,
+    @Query('companyId') companyId: number,
+    @Body()
+    body: {
+      assignmentId: number;
+      startDate: string;
+      endDate: string;
+      replacementForId?: number;
+      replacementPersonnelId?: number; // NEW: Accept replacement personnel ID
+    },
+  ) {
+    console.log('test', body);
+
+    console.log('Received replacement request:', {
+      missionId,
+      companyId,
+      ...body,
+    });
+
+    return this.attendanceService.createReplacementAttendance(
+      body.assignmentId,
+      body.startDate,
+      body.endDate,
+      body.replacementForId,
+      body.replacementPersonnelId,
+    );
   }
 }
