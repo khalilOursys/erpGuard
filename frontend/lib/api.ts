@@ -4,6 +4,8 @@ type Json = any;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '');
 
+export { API_BASE };
+
 if (!process.env.NEXT_PUBLIC_API_URL && process.env.NODE_ENV === 'development') {
   console.warn('NEXT_PUBLIC_API_URL not set in .env.local. Using fallback: http://localhost:3001. Set it for production!');
 }
@@ -98,7 +100,7 @@ const api = {
   },
 
   // POST with JSON body or FormData
-  async post<T = Json>(url: string, body?: any): Promise<T> {
+  async post<T = Json>(url: string, body?: any, p0?: { headers: { "Content-Type": string; }; }): Promise<T> {
     const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
     const opts: RequestInit = {
       method: "POST",
@@ -113,12 +115,13 @@ const api = {
   },
 
   // PUT (JSON)
-  async put<T = Json>(url: string, body: any): Promise<T> {
-    return this.request<T>(url, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    });
-  },
+async put<T = Json>(url: string, body?: any): Promise<T> {
+  const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
+  return this.request<T>(url, {
+    method: "PUT",
+    body: payload,
+  });
+},
 
   // PATCH (JSON)
   async patch<T = Json>(url: string, body?: any): Promise<T> {

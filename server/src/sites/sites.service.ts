@@ -20,8 +20,6 @@ export class SitesService {
         road: dto.road ?? null,
         postalCode: dto.postalCode ?? null,
         address: dto.address,
-        latitude: dto.latitude ?? null,
-        longitude: dto.longitude ?? null,
         countryCode: dto.countryCode ?? null,
         stateCode: dto.stateCode ?? null,
       },

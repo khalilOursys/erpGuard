@@ -1,3 +1,4 @@
+// src/contracts/contract.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -6,10 +7,18 @@ import {
 import { PrismaService } from 'src/prisma.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import { join, extname } from 'path';
+import * as fs from 'fs/promises';
 
 @Injectable()
 export class ContractService {
-  constructor(private prisma: PrismaService) {}
+  private readonly uploadDir = join(process.cwd(), 'uploads/contracts');
+
+  constructor(private prisma: PrismaService) {
+    fs.mkdir(this.uploadDir, { recursive: true }).catch((e) =>
+      console.error('Failed to create upload directory:', e),
+    );
+  }
 
   private generateContractNumber(companyId: number) {
     return `CON-${companyId}-${Date.now()}`;
@@ -19,7 +28,44 @@ export class ContractService {
     companyId: number,
     dto: CreateContractDto,
     actorUserId?: number,
+    file?: Express.Multer.File,
   ) {
+    // Add requirement for at least one site
+    if (!dto.sites || dto.sites.length < 1) {
+      throw new BadRequestException('At least one site is required');
+    }
+
+    // Validate contract dates
+    const contractStart = new Date(dto.startDate);
+    const contractEnd = new Date(dto.endDate);
+    if (isNaN(contractStart.getTime()) || isNaN(contractEnd.getTime())) {
+      throw new BadRequestException('Invalid contract start or end date');
+    }
+    if (contractEnd < contractStart) {
+      throw new BadRequestException(
+        'Contract end date must be after start date',
+      );
+    }
+
+    // Validate site dates
+    for (const site of dto.sites) {
+      const siteStart = new Date(site.startDate);
+      const siteEnd = new Date(site.endDate);
+      if (isNaN(siteStart.getTime()) || isNaN(siteEnd.getTime())) {
+        throw new BadRequestException(`Invalid dates for site ${site.siteId}`);
+      }
+      if (siteEnd < siteStart) {
+        throw new BadRequestException(
+          `End date must be after start date for site ${site.siteId}`,
+        );
+      }
+      if (siteStart < contractStart || siteEnd > contractEnd) {
+        throw new BadRequestException(
+          `Dates for site ${site.siteId} must be within contract date range`,
+        );
+      }
+    }
+
     // Validate client ownership
     const client = await this.prisma.client.findUnique({
       where: { id: dto.clientId },
@@ -36,14 +82,13 @@ export class ContractService {
       if (sites.length !== new Set(siteIds).size) {
         throw new BadRequestException('One or more sites not found');
       }
-      // ensure all sites belong to client
       for (const s of sites) {
         if (s.clientId !== dto.clientId)
           throw new BadRequestException('Site does not belong to client');
       }
     }
 
-    // validate services existence (contract-level & site-level)
+    // Validate services existence (contract-level & site-level)
     const serviceIds: number[] = [];
     if (dto.serviceRates)
       dto.serviceRates.forEach((sr) => serviceIds.push(sr.serviceId));
@@ -64,11 +109,11 @@ export class ContractService {
     }
 
     const contractNumber =
-      dto.contractNumber ?? this.generateContractNumber(companyId);
+      dto.contractNumber?.trim() || this.generateContractNumber(companyId);
 
     // Create contract and nested data in transaction
-    return this.prisma.$transaction(async (tx) => {
-      // create contract
+    let contract = await this.prisma.$transaction(async (tx) => {
+      // Create contract
       const contract = await tx.clientContract.create({
         data: {
           contractNumber,
@@ -80,7 +125,7 @@ export class ContractService {
         },
       });
 
-      // create contract-level service rates (ClientContractService)
+      // Create contract-level service rates (ClientContractService)
       if (dto.serviceRates && dto.serviceRates.length > 0) {
         const createRates = dto.serviceRates.map((r) => ({
           clientContractId: contract.id,
@@ -90,13 +135,9 @@ export class ContractService {
           clientPrice: r.clientPrice ?? 0,
           createdAt: new Date(),
         }));
-        await tx.clientContractService.createMany({
-          data: createRates,
-          skipDuplicates: true,
-        });
       }
 
-      // create per-site contract entries and per-site services
+      // Create per-site contract entries and per-site services
       if (dto.sites && dto.sites.length > 0) {
         for (const s of dto.sites) {
           const createdSite = await tx.clientContractSite.create({
@@ -126,20 +167,74 @@ export class ContractService {
         }
       }
 
-      // return created contract with relations
+      // Return created contract with relations
       return tx.clientContract.findUnique({
         where: { id: contract.id },
         include: {
-          serviceRates: true,
           sites: {
             include: {
               services: true,
             },
           },
           client: true,
+          file: true,
         },
       });
     });
+
+    if (file) {
+      const tempFilePath = file.path;
+      try {
+        await fs.access(tempFilePath);
+        console.log('Create: File access successful');
+      } catch (error) {
+        console.error('Create: File access failed:', error);
+        throw new BadRequestException(
+          `Uploaded file not found on server: ${error.message}`,
+        );
+      }
+
+      const ext = extname(file.originalname);
+      const newFilename = `${contract.id}${ext}`;
+      const newFilePath = join(this.uploadDir, newFilename);
+
+      try {
+        await fs.rename(tempFilePath, newFilePath);
+        console.log(`Create: Renamed file to ${newFilePath}`);
+        const fileRecord = await this.prisma.file.create({
+          data: {
+            filename: file.originalname,
+            url: `/uploads/contracts/${newFilename}`,
+            mimeType: file.mimetype,
+            size: file.size,
+            uploadedById: actorUserId || null,
+          },
+        });
+        await this.prisma.clientContract.update({
+          where: { id: contract.id },
+          data: { fileId: fileRecord.id },
+        });
+        contract = await this.prisma.clientContract.findUnique({
+          where: { id: contract.id },
+          include: {
+            sites: {
+              include: {
+                services: true,
+              },
+            },
+            client: true,
+            file: true,
+          },
+        });
+      } catch (error) {
+        console.error('Create: File rename failed:', error);
+        throw new BadRequestException(
+          `Failed to process uploaded file: ${error.message}`,
+        );
+      }
+    }
+
+    return contract;
   }
 
   async update(
@@ -147,23 +242,83 @@ export class ContractService {
     id: number,
     dto: UpdateContractDto,
     actorUserId?: number,
+    file?: Express.Multer.File,
   ) {
     // Fetch existing contract to validate
-    const existing = await this.prisma.clientContract.findUnique({
+    let existing = await this.prisma.clientContract.findUnique({
       where: { id },
       include: {
         client: true,
-        serviceRates: true,
         sites: { include: { services: true } },
+        file: true,
       },
     });
     if (!existing || existing.companyId !== companyId) {
       throw new NotFoundException('Contract not found');
     }
-    if (existing.status !== 'DRAFT') {
-      throw new BadRequestException('Only draft contracts can be updated');
+
+    // Prevent editing confirmed contracts
+    if (existing.status === 'CONFIRMED') {
+      throw new BadRequestException('Cannot edit confirmed contracts');
+    }
+    // Compute new contract dates
+    const newStart = dto.startDate
+      ? new Date(dto.startDate)
+      : existing.startDate;
+    const newEnd = dto.endDate ? new Date(dto.endDate) : existing.endDate;
+
+    if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+      throw new BadRequestException('Invalid contract start or end date');
+    }
+    if (newEnd < newStart) {
+      throw new BadRequestException(
+        'Contract end date must be after start date',
+      );
     }
 
+    // Determine sites to validate
+    const willUpdateSites = dto.sites !== undefined;
+    let sitesToValidate: {
+      siteId?: number;
+      startDate: string | Date;
+      endDate: string | Date;
+    }[] = [];
+
+    if (willUpdateSites) {
+      if (dto.sites && dto.sites.length < 1) {
+        throw new BadRequestException(
+          'At least one site is required if updating sites',
+        );
+      }
+      sitesToValidate = dto.sites || [];
+    } else if (dto.startDate !== undefined || dto.endDate !== undefined) {
+      sitesToValidate = existing.sites.map((s) => ({
+        siteId: s.siteId,
+        startDate: s.startDate,
+        endDate: s.endDate,
+      }));
+    }
+
+    // Validate site dates if necessary
+    for (const site of sitesToValidate) {
+      const siteStart = new Date(site.startDate);
+      const siteEnd = new Date(site.endDate);
+      if (isNaN(siteStart.getTime()) || isNaN(siteEnd.getTime())) {
+        throw new BadRequestException(
+          `Invalid dates for site ${site.siteId || 'new'}`,
+        );
+      }
+      if (siteEnd < siteStart) {
+        throw new BadRequestException(
+          `End date must be after start date for site ${site.siteId || 'new'}`,
+        );
+      }
+      if (siteStart < newStart || siteEnd > newEnd) {
+        throw new BadRequestException(
+          `Dates for site ${site.siteId || 'new'} must be within contract date range`,
+        );
+      }
+    }
     // Validate client if changing
     let clientId = existing.clientId;
     if (dto.clientId && dto.clientId !== existing.clientId) {
@@ -192,11 +347,10 @@ export class ContractService {
       }
     }
 
-    // Validate services (contract-level & site-level)
+    // Validate services if provided
     const serviceIds: number[] = [];
-    if (dto.serviceRates) {
+    if (dto.serviceRates)
       dto.serviceRates.forEach((sr) => serviceIds.push(sr.serviceId));
-    }
     if (dto.sites) {
       dto.sites.forEach((s) =>
         s.services?.forEach((ss) => serviceIds.push(ss.serviceId)),
@@ -212,36 +366,25 @@ export class ContractService {
         );
       }
     }
-
-    // Update in transaction
-    return this.prisma.$transaction(async (tx) => {
-      // Update top-level contract fields (only if provided in DTO)
+    const newContractNumber =
+      dto.contractNumber !== undefined
+        ? dto.contractNumber?.trim() || this.generateContractNumber(companyId)
+        : existing.contractNumber;
+    // Update contract in transaction
+    let updated = await this.prisma.$transaction(async (tx) => {
+      // Update contract base fields
       const updateData: any = {};
-      if (dto.contractNumber) updateData.contractNumber = dto.contractNumber;
-      if (dto.clientId) updateData.clientId = dto.clientId;
+      if (dto.contractNumber) updateData.contractNumber = newContractNumber;
       if (dto.startDate) updateData.startDate = new Date(dto.startDate);
       if (dto.endDate) updateData.endDate = new Date(dto.endDate);
+      if (dto.clientId) updateData.clientId = dto.clientId;
 
-      const contract = await tx.clientContract.update({
+      await tx.clientContract.update({
         where: { id },
         data: updateData,
       });
 
-      // Delete existing nested data
-      // First, delete site services (child of sites)
-      await tx.clientContractSiteService.deleteMany({
-        where: { contractSite: { clientContractId: id } },
-      });
-      // Then, delete sites
-      await tx.clientContractSite.deleteMany({
-        where: { clientContractId: id },
-      });
-      // Delete contract-level service rates
-      await tx.clientContractService.deleteMany({
-        where: { clientContractId: id },
-      });
-
-      // Recreate contract-level service rates if provided
+      // Recreate contract-level service rates
       if (dto.serviceRates && dto.serviceRates.length > 0) {
         const createRates = dto.serviceRates.map((r) => ({
           clientContractId: id,
@@ -251,13 +394,17 @@ export class ContractService {
           clientPrice: r.clientPrice ?? 0,
           createdAt: new Date(),
         }));
-        await tx.clientContractService.createMany({
-          data: createRates,
-          skipDuplicates: true,
-        });
       }
 
-      // Recreate sites and their services if provided
+      // Delete existing sites and their services
+      await tx.clientContractSiteService.deleteMany({
+        where: { contractSite: { clientContractId: id } },
+      });
+      await tx.clientContractSite.deleteMany({
+        where: { clientContractId: id },
+      });
+
+      // Recreate sites and their services
       if (dto.sites && dto.sites.length > 0) {
         for (const s of dto.sites) {
           const createdSite = await tx.clientContractSite.create({
@@ -287,20 +434,84 @@ export class ContractService {
         }
       }
 
-      // Return updated contract with relations (use tx for consistency)
+      // Handle file update
+      if (file) {
+        // Delete old file if exists
+        if (existing.fileId) {
+          const oldFile = existing.file;
+          if (oldFile) {
+            const oldFilename = oldFile.url.split('/').pop();
+            if (oldFilename) {
+              const oldPath = join(this.uploadDir, oldFilename);
+              try {
+                await fs.unlink(oldPath);
+                console.log(`Update: Deleted old file: ${oldPath}`);
+              } catch (e) {
+                if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+                  console.error('Update: Failed to delete old file:', e);
+                  throw new BadRequestException(
+                    `Failed to delete old file: ${e.message}`,
+                  );
+                }
+              }
+              await tx.file
+                .delete({ where: { id: existing.fileId } })
+                .catch(() => {});
+            }
+          }
+        }
+
+        const tempFilePath = file.path;
+        try {
+          await fs.access(tempFilePath);
+          console.log('Update: File access successful');
+        } catch (error) {
+          console.error('Update: File access failed:', error);
+          throw new BadRequestException(
+            `Uploaded file not found on server: ${error.message}`,
+          );
+        }
+
+        const ext = extname(file.originalname);
+        const newFilename = `${id}${ext}`;
+        const newFilePath = join(this.uploadDir, newFilename);
+
+        try {
+          await fs.rename(tempFilePath, newFilePath);
+          console.log(`Update: Renamed file to ${newFilePath}`);
+          const fileRecord = await tx.file.create({
+            data: {
+              filename: file.originalname,
+              url: `/uploads/contracts/${newFilename}`,
+              mimeType: file.mimetype,
+              size: file.size,
+              uploadedById: actorUserId || null,
+            },
+          });
+          await tx.clientContract.update({
+            where: { id },
+            data: { fileId: fileRecord.id },
+          });
+        } catch (error) {
+          console.error('Update: File rename failed:', error);
+          throw new BadRequestException(
+            `Failed to process uploaded file: ${error.message}`,
+          );
+        }
+      }
+
+      // Return updated contract
       return tx.clientContract.findUnique({
         where: { id },
         include: {
-          serviceRates: true,
-          sites: {
-            include: {
-              services: true,
-            },
-          },
+          sites: { include: { services: true } },
           client: true,
+          file: true,
         },
       });
     });
+
+    return updated;
   }
 
   async findAll(
@@ -332,7 +543,6 @@ export class ContractService {
       include: {
         client: { select: { id: true, name: true } },
         file: true,
-        serviceRates: true,
         sites: { include: { services: true } },
         submittedBy: {
           select: { id: true, displayname: true, identifier: true },
@@ -351,7 +561,6 @@ export class ContractService {
       where: { id },
       include: {
         client: true,
-        serviceRates: true,
         sites: {
           include: {
             services: { include: { service: true } },
@@ -377,10 +586,7 @@ export class ContractService {
       where: { clientId, deletedAt: null },
     });
   }
-  /**
-   * Return missions belonging to a contract (tenant-safe).
-   * Supports basic pagination via page & pageSize.
-   */
+
   async getMissionsForContract(
     companyId: number,
     contractId: number,
@@ -389,7 +595,6 @@ export class ContractService {
     const page = options.page ?? 1;
     const pageSize = options.pageSize ?? 25;
 
-    // ensure contract exists and belongs to company
     const contract = await this.prisma.clientContract.findUnique({
       where: { id: contractId },
     });
@@ -426,7 +631,6 @@ export class ContractService {
       throw new BadRequestException('Only DRAFT contracts can be submitted');
     }
 
-    // Use transaction: update contract, find approvers and create notifications
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.clientContract.update({
         where: { id },
@@ -437,14 +641,12 @@ export class ContractService {
         },
       });
 
-      // find roles that have the permission 'contracts.confirm'
       const rolePerms = await tx.rolePermission.findMany({
         where: { permission: { name: 'contracts.confirm' } },
         select: { roleName: true },
       });
       const roles = rolePerms.map((r) => r.roleName);
 
-      // build 'OR' conditions for users who are either in those roles OR have the userPermission
       const orConditions: any[] = [];
       if (roles.length > 0) orConditions.push({ role: { in: roles } });
       orConditions.push({
@@ -473,8 +675,6 @@ export class ContractService {
           },
           createdAt: new Date(),
         }));
-        // Prisma's createMany for JSON fields: convert metadata to JSON if provider needs it
-        // createMany with metadata requires it to be serializable; Prisma will accept object
         await tx.notification.createMany({
           data: notifData as any,
           skipDuplicates: true,
@@ -485,9 +685,6 @@ export class ContractService {
     });
   }
 
-  /**
-   * Confirm contract => create missions
-   */
   async confirm(companyId: number, id: number, confirmerUserId: number) {
     const contract = await this.prisma.clientContract.findUnique({
       where: { id },
@@ -495,7 +692,6 @@ export class ContractService {
         sites: {
           include: { services: true, site: true },
         },
-        serviceRates: true,
         client: true,
       },
     });
@@ -548,9 +744,7 @@ export class ContractService {
         // create MissionServiceRequirement rows from cSite.services.
         for (const s of cSite.services || []) {
           // find contract-level service rate to fallback if needed
-          const contractLevel = (contract.serviceRates || []).find(
-            (r) => r.serviceId === s.serviceId,
-          );
+          const contractLevel = [].find((r) => r.serviceId === s.serviceId);
 
           const basePay = s.basePay ?? contractLevel?.basePay ?? 0;
           const extraPay = s.extraPay ?? contractLevel?.extraPay ?? 0;
@@ -621,41 +815,93 @@ export class ContractService {
 
     return updated;
   }
+
   async attachFile(
     companyId: number,
     contractId: number,
-    fileId: number,
+    file: Express.Multer.File,
     actorUserId: number,
   ) {
     if (!actorUserId) throw new BadRequestException('Actor user id required');
 
     const contract = await this.prisma.clientContract.findUnique({
       where: { id: contractId },
+      include: { file: true },
     });
     if (!contract || contract.companyId !== companyId)
       throw new NotFoundException('Contract not found');
 
-    // ensure file exists
-    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
-    if (!file) throw new BadRequestException('File not found');
+    // Delete old file if exists
+    if (contract.fileId) {
+      const oldFile = contract.file;
+      if (oldFile) {
+        const oldFilename = oldFile.url.split('/').pop();
+        if (oldFilename) {
+          const oldPath = join(this.uploadDir, oldFilename);
+          try {
+            await fs.unlink(oldPath);
+            console.log(`AttachFile: Deleted old file: ${oldPath}`);
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+              console.error('AttachFile: Failed to delete old file:', e);
+            }
+          }
+          await this.prisma.file
+            .delete({ where: { id: contract.fileId } })
+            .catch(() => {});
+        }
+      }
+    }
 
-    const updated = await this.prisma.clientContract.update({
-      where: { id: contractId },
-      data: { fileId },
-    });
+    const tempFilePath = file.path;
+    try {
+      await fs.access(tempFilePath);
+      console.log('AttachFile: File access successful');
+    } catch (error) {
+      console.error('AttachFile: File access failed:', error);
+      throw new BadRequestException(
+        `Uploaded file not found on server: ${error.message}`,
+      );
+    }
 
-    // audit log (userId must be a number)
-    await this.prisma.auditLog.create({
-      data: {
-        userId: actorUserId,
-        action: 'UPLOAD_FILE',
-        entity: 'ClientContract',
-        entityId: contractId,
-        timestamp: new Date(),
-        newData: { fileId },
-      },
-    });
+    const ext = extname(file.originalname);
+    const newFilename = `${contractId}${ext}`;
+    const newFilePath = join(this.uploadDir, newFilename);
 
-    return updated;
+    try {
+      await fs.rename(tempFilePath, newFilePath);
+      console.log(`AttachFile: Renamed file to ${newFilePath}`);
+      const fileRecord = await this.prisma.file.create({
+        data: {
+          filename: file.originalname,
+          url: `/uploads/contracts/${newFilename}`,
+          mimeType: file.mimetype,
+          size: file.size,
+          uploadedById: actorUserId,
+        },
+      });
+      const updated = await this.prisma.clientContract.update({
+        where: { id: contractId },
+        data: { fileId: fileRecord.id },
+      });
+
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: 'UPLOAD_FILE',
+          entity: 'ClientContract',
+          entityId: contractId,
+          timestamp: new Date(),
+          newData: { fileId: fileRecord.id },
+        },
+      });
+
+      return updated;
+    } catch (error) {
+      console.error('AttachFile: File rename failed:', error);
+      throw new BadRequestException(
+        `Failed to process uploaded file: ${error.message}`,
+      );
+    }
   }
 }

@@ -17,12 +17,12 @@ export default function AddClientPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-background rounded-lg shadow">
-      <h1 className="text-2xl font-bold mb-6">Add Client</h1>
-      <ClientForm
-        onSuccess={handleSuccess}
-        onCancel={handleCancel}
-      />
+    // Changed to min-h-screen for full expansion; no overflow to let body scroll
+    <div className="min-h-screen w-full bg-background p-6">
+      <div className="max-w-2xl mx-auto bg-card rounded-lg shadow p-6">
+        <h1 className="text-2xl font-bold mb-6">Add Client</h1>
+        <ClientForm onSuccess={handleSuccess} onCancel={handleCancel} />
+      </div>
     </div>
   );
 }
