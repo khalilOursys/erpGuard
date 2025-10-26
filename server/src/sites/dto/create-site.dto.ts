@@ -22,14 +22,6 @@ export class CreateSiteDto {
   address!: string;
 
   @IsOptional()
-  @IsNumber()
-  latitude?: number;
-
-  @IsOptional()
-  @IsNumber()
-  longitude?: number;
-
-  @IsOptional()
   @IsString()
   countryCode?: string;
 

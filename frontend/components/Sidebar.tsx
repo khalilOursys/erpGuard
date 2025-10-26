@@ -104,106 +104,7 @@ export default function Sidebar() {
             {!collapsed && "Contracts"}
           </Button>
         </Link>
-
-        {/* <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="inventory">
-            <AccordionTrigger
-              className={`py-2 ${
-                collapsed ? "justify-center px-2" : "justify-start"
-              }`}
-            >
-              <Package className="mr-2 h-4 w-4" />
-              {!collapsed && "Inventory"}
-            </AccordionTrigger>
-            <AccordionContent>
-              {!collapsed && (
-                <div className="space-y-1 pl-4">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Products
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Stock
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Suppliers
-                  </Button>
-                </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="sales">
-            <AccordionTrigger
-              className={`py-2 ${
-                collapsed ? "justify-center px-2" : "justify-start"
-              }`}
-            >
-              <DollarSign className="mr-2 h-4 w-4" />
-              {!collapsed && "Sales"}
-            </AccordionTrigger>
-            <AccordionContent>
-              {!collapsed && (
-                <div className="space-y-1 pl-4">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Orders
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Invoices
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Customers
-                  </Button>
-                </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="analytics">
-            <AccordionTrigger
-              className={`py-2 ${
-                collapsed ? "justify-center px-2" : "justify-start"
-              }`}
-            >
-              <BarChart className="mr-2 h-4 w-4" />
-              {!collapsed && "Analytics"}
-            </AccordionTrigger>
-            <AccordionContent>
-              {!collapsed && (
-                <div className="space-y-1 pl-4">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Reports
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sm"
-                  >
-                    Forecasts
-                  </Button>
-                </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion> */}
-
+        
         <Link href="/personnel">
           <Button
             variant="ghost"
@@ -250,18 +151,10 @@ export default function Sidebar() {
             className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
           >
             <Settings className="mr-2 h-4 w-4" />
-            {!collapsed && "Settings"}
+            {!collapsed && "Company settings"}
           </Button>
         </Link>
-
-        <Button
-          variant="ghost"
-          className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          {!collapsed && "Documents"}
-        </Button>
-
+        
         <Button
           variant="ghost"
           className={`w-full justify-start ${collapsed ? "px-2" : ""}`}

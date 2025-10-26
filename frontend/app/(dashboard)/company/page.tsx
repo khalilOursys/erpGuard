@@ -325,9 +325,6 @@ export default function EditCompanyPage() {
                   <Button onClick={goBack} variant="secondary">
                     <i className="fas fa-arrow-left mr-2"></i> Back
                   </Button>
-                  <div className="text-sm text-muted-foreground">
-                    Editing company for: <strong>{currentUser?.email}</strong>
-                  </div>
                 </div>
 
                 <form onSubmit={submitForm}>

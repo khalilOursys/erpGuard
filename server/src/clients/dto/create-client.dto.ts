@@ -1,17 +1,47 @@
-import { IsNotEmpty, IsString, IsOptional, IsEnum, IsArray, ValidateNested, ArrayUnique } from 'class-validator';
+// src/clients/dto/create-client.dto.ts (assuming this exists; if not, create it)
+import { IsString, IsEnum, IsOptional, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ClientType } from '@prisma/client';
-import { CreateClientContactDto } from './create-client-contact.dto';
-import { CreateSiteDto } from './create-site.dto';
+import { ClientType, ContactType } from '@prisma/client'; // Adjust import path as needed
+
+export class CreateClientContactDto {
+  @IsEnum(ContactType)
+  type: ContactType;
+
+  @IsString()
+  value: string;
+}
+
+export class CreateSiteDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  road?: string;
+
+  @IsOptional()
+  @IsString()
+  postalCode?: string;
+
+  @IsString()
+  address: string;
+
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  stateCode?: string;
+}
 
 export class CreateClientDto {
-  @IsNotEmpty()
   @IsString()
-  name!: string;
+  name: string;
 
-  @IsNotEmpty()
   @IsEnum(ClientType)
-  type!: ClientType;
+  type: ClientType;
 
   @IsOptional()
   @IsString()
@@ -28,7 +58,6 @@ export class CreateClientDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @ArrayUnique((o: CreateClientContactDto) => `${o.type}:${o.value}`)
   @Type(() => CreateClientContactDto)
   contacts?: CreateClientContactDto[];
 

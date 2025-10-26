@@ -1,3 +1,4 @@
+// pages/contracts.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -40,14 +41,8 @@ type Contract = {
   client: { id: number; name: string };
   startDate: string;
   endDate: string;
-  file?: { id: number; url: string };
+  file?: { id: number; url: string; filename: string };
   status: ContractStatus;
-  serviceRates: {
-    serviceId: number;
-    basePay: number;
-    extraPay: number;
-    clientPrice: number;
-  }[];
   sites: {
     siteId: number;
     site: { id: number; name: string } | null;
@@ -146,33 +141,46 @@ export default function ContractsPage() {
 
   const handleDownloadPDF = async (url: string, filename: string) => {
     try {
-      // Programmatic download via <a> tag (works for same-origin URLs)
+      // Ensure the URL is absolute by prepending the API base URL if needed
+      const absoluteUrl = url.startsWith('http')
+        ? url
+        : `${process.env.NEXT_PUBLIC_API_URL}${url}`;
+      const response = await fetch(absoluteUrl, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = url;
-      link.download = filename || "contract.pdf";
+      link.href = downloadUrl;
+      link.download = filename; // Use the original filename from the backend
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("PDF download failed:", err);
-      toast.error("Failed to download PDF");
+      toast.error("Failed to download PDF: " + err);
     }
   };
 
   const columns: ColumnDef<Contract>[] = [
-    // New download icon column (first column, no header)
     {
       id: "download",
-      header: "",
+      header: "Download Contract",
       cell: ({ row }) => {
         const contract = row.original;
-        const fileUrl = contract.file?.url;
-        if (fileUrl) {
+        const file = contract.file;
+        if (file?.url) {
           return (
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => handleDownloadPDF(fileUrl, `contract-${contract.contractNumber}.pdf`)}
+              onClick={() => handleDownloadPDF(file.url, file.filename)}
               title="Download PDF"
             >
               <Download className="h-4 w-4" />
@@ -180,12 +188,12 @@ export default function ContractsPage() {
           );
         } else {
           return (
-            <span title="No PDF uploaded" className="inline-block">
+            <div className="flex justify-center items-center h-8 w-8">
               <AlertCircle
                 className="h-4 w-4 text-muted-foreground"
                 aria-hidden="true"
               />
-            </span>
+            </div>
           );
         }
       },
@@ -197,16 +205,6 @@ export default function ContractsPage() {
     {
       accessorKey: "client.name",
       header: "Client",
-    },
-    {
-      accessorKey: "sites",
-      header: "Sites",
-      cell: ({ row }) =>
-        row.original.sites
-          ?.map((s) =>
-            s.site != null && s.site.name != null ? s.site.name : "Unknown"
-          )
-          .join(", ") || "N/A",
     },
     {
       accessorKey: "status",
@@ -226,7 +224,6 @@ export default function ContractsPage() {
       id: "actions",
       cell: ({ row }) => {
         const contract = row.original;
-        const fileUrl = contract.file?.url;
 
         return (
           <DropdownMenu>
@@ -244,32 +241,6 @@ export default function ContractsPage() {
                 View/Edit
               </DropdownMenuItem>
 
-              {fileUrl ? (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => window.open(fileUrl, "_blank")}
-                  >
-                    View PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      handleDownloadPDF(fileUrl, `contract-${contract.contractNumber}.pdf`)
-                    }
-                  >
-                    Download PDF
-                  </DropdownMenuItem>
-                </>
-              ) : (
-                <>
-                  <DropdownMenuItem disabled>
-                    View PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled>
-                    Download PDF
-                  </DropdownMenuItem>
-                </>
-              )}
-
               {permissions.includes("contracts.manage") &&
                 contract.status === "DRAFT" && (
                   <DropdownMenuItem
@@ -286,7 +257,9 @@ export default function ContractsPage() {
                     >
                       Confirm
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleReject(contract.id)}>
+                    <DropdownMenuItem
+                      onClick={() => handleReject(contract.id)}
+                    >
                       Reject
                     </DropdownMenuItem>
                   </>

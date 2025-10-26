@@ -40,17 +40,38 @@ import { AttendanceModule } from './attendance/attendance.module';
     ServiceModule,
     FilesModule,
     BillingModule,
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads/contracts'), // Absolute path to the folder
-      serveRoot: '/uploads/contracts', // URL prefix to match your DB URLs (e.g., /uploads/contracts/123456.pdf)
-      serveStaticOptions: {
-        // Optional: Cache control, etc., for production
-        maxAge: 3600000, // 1 hour cache
-        setHeaders: (res) => {
-          res.setHeader('Content-Disposition', 'attachment'); // Force download instead of inline view (optional, but good for PDFs)
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(process.cwd(), 'uploads/idpapers'),
+        serveRoot: '/uploads/idpapers',
+        serveStaticOptions: {
+          maxAge: 3600000,
+          setHeaders: (res) => {
+            res.setHeader('Content-Disposition', 'attachment');
+          },
         },
       },
-    }),
+      {
+        rootPath: join(process.cwd(), 'uploads/personnelContracts'),
+        serveRoot: '/uploads/personnelContracts',
+        serveStaticOptions: {
+          maxAge: 3600000,
+          setHeaders: (res) => {
+            res.setHeader('Content-Disposition', 'attachment');
+          },
+        },
+      },
+      {
+        rootPath: join(process.cwd(), 'uploads/contracts'),
+        serveRoot: '/uploads/contracts',
+        serveStaticOptions: {
+          maxAge: 3600000,
+          setHeaders: (res) => {
+            res.setHeader('Content-Disposition', 'attachment');
+          },
+        },
+      },
+    ),
     AttendanceModule,
   ],
   providers: [

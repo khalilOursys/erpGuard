@@ -1,4 +1,5 @@
-import { IsEnum, IsString } from 'class-validator';
+// src/clients/dto/create-client-contact.dto.ts (if separate; otherwise use the one above)
+import { IsString, IsEnum } from 'class-validator';
 import { ContactType } from '@prisma/client';
 
 export class CreateClientContactDto {

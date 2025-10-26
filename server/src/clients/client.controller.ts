@@ -1,8 +1,10 @@
+// src/modules/client/client.controller.ts
 import {
   Controller, Post, Body, UseGuards, Get, Param, ParseIntPipe, Put, Delete, Req, Query, Patch,
 } from '@nestjs/common';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PermissionsGuard } from 'src/common/guards/permissions.guard';
 import { Permissions } from 'src/common/decorators/permissions.decorator';
@@ -46,7 +48,7 @@ export class ClientController {
 
   @Permissions('client.manage')
   @Put(':id')
-  async update(@Req() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  async update(@Req() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateClientDto) {
     const companyId = req.user.companyId;
     return this.service.update(companyId, id, dto);
   }

@@ -136,10 +136,6 @@ export default function ServicesPage() {
       cell: ({ row }) => (row.original.isActive ? "Yes" : "No"),
     },
     {
-      accessorKey: "defaultClientPrice",
-      header: "Client Price",
-    },
-    {
       accessorKey: "createdAt",
       header: "Created At",
       cell: ({ row }) => new Date(row.original.createdAt).toLocaleString(),

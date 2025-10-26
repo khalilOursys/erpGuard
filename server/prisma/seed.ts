@@ -297,30 +297,7 @@ async function main() {
         startDate: new Date(),
         endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30 * 6), // +6 months
         companyId: company.id,
-        serviceRates: {
-          create: [
-            {
-              serviceId: guardService.id,
-              basePay: 1000 as any,
-              extraPay: 200 as any,
-              clientPrice: 1500 as any,
-            },
-            {
-              serviceId: cookingService.id,
-              basePay: 800 as any,
-              extraPay: 100 as any,
-              clientPrice: 1200 as any,
-            },
-            {
-              serviceId: cleaningService.id,
-              basePay: 600 as any,
-              extraPay: 50 as any,
-              clientPrice: 900 as any,
-            },
-          ],
-        },
       },
-      include: { serviceRates: true },
     });
     console.log('Client contract created');
   } else {

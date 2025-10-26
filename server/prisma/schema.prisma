@@ -92,6 +92,12 @@ enum ContractStatus {
   REJECTED
 }
 
+enum IdentifierType {
+  NATIONAL_ID
+  PASSPORT
+  RESIDENCE_PERMIT
+}
+
 
 /**
  * Core models
@@ -166,8 +172,6 @@ model Site {
   road               String? // road / street
   postalCode         String? // optional postal code
   address            String // free-form address line
-  latitude           Float? // optional geo coordinates
-  longitude          Float?
   countryCode        String?
   stateCode          String?
   client             Client               @relation(fields: [clientId], references: [id])
@@ -234,7 +238,6 @@ model Service {
   deletedAt                 DateTime?
   BillingLine               BillingLine[]
   MissionServiceRequirement MissionServiceRequirement[]
-  ClientContractService     ClientContractService[]
   ClientContractSiteService ClientContractSiteService[]
 
   @@index([companyId])
@@ -245,33 +248,38 @@ model Service {
  * Personnel — generic workers assigned to services
  */
 model Personnel {
-  id             Int                 @id @default(autoincrement())
-  company        Company             @relation(fields: [companyId], references: [id])
-  companyId      Int
-  firstName      String
-  lastName       String
-  identifier     String?             @unique // optional employee code
-  email          String?             @unique
-  phone          String?
-  hireDate       DateTime            @default(now())
-  baseSalary     Decimal             @db.Decimal(16, 2)
-  service        Service?            @relation(fields: [serviceId], references: [id])
-  serviceId      Int?
-  contracts      PersonnelContract[]
-  assignments    MissionAssignment[]
-  attendances    Attendance[]
-  paymentRecords PaymentRecord[]
-  billingLines   BillingLine[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @default(now())
-  isDeleted      Boolean             @default(false)
-  deletedAt      DateTime?
+  id               Int                 @id @default(autoincrement())
+  company          Company             @relation(fields: [companyId], references: [id])
+  companyId        Int
+  firstName        String
+  lastName         String
+  identifier       String?
+  identifierType   IdentifierType?     // New: type of identifier
+  email            String? @unique
+  phone            String?             // Added: optional phone for completeness
+  idPictureId      Int? @unique        // Added: foreign key for ID picture (one-to-one)
+  idPicture        File?               @relation("PersonnelIdPicture", fields: [idPictureId], references: [id])
+  hireDate         DateTime?
+  baseSalary       Decimal             @db.Decimal(10, 2)
+  service          Service?            @relation(fields: [serviceId], references: [id])
+  serviceId        Int?
+  fileId           Int?                @unique  // New: one-to-one with File
+  file             File?               @relation("PersonnelFile", fields: [fileId], references: [id])
+  contracts        PersonnelContract[]
+  assignments      MissionAssignment[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  isDeleted        Boolean             @default(false)
+  deletedAt        DateTime?
 
   chiefMissions Mission[] @relation("ServiceChief")
 
   @@index([companyId])
   @@index([email])
   @@index([serviceId])
+  PaymentRecord PaymentRecord[]
+  Attendance Attendance[]
+  BillingLine BillingLine[]
 }
 
 /**
@@ -307,7 +315,6 @@ model ClientContract {
   endDate        DateTime
   file           File?                   @relation(fields: [fileId], references: [id])
   fileId         Int?
-  serviceRates   ClientContractService[] // per-service pricing defaults for this contract
   sites          ClientContractSite[] // the contract's coverage per site
   extensions     ContractExtension[]
   missions       Mission[]
@@ -329,25 +336,6 @@ model ClientContract {
   @@index([clientId])
   @@index([startDate, endDate])
   @@index([companyId])
-}
-
-/**
- * Per-contract, per-service rates
- */
-model ClientContractService {
-  id               Int            @id @default(autoincrement())
-  clientContract   ClientContract @relation(fields: [clientContractId], references: [id])
-  clientContractId Int
-  service          Service        @relation(fields: [serviceId], references: [id])
-  serviceId        Int
-
-  basePay     Decimal  @db.Decimal(16, 2) // what personnel gets (base)
-  extraPay    Decimal  @db.Decimal(16, 2) // extra when on mission (e.g., overtime)
-  clientPrice Decimal  @db.Decimal(18, 2) // how much client is charged per personnel unit
-  createdAt   DateTime @default(now())
-
-  @@unique([clientContractId, serviceId])
-  @@index([serviceId])
 }
 
 /**
@@ -663,24 +651,25 @@ model PaymentRecord {
  * File metadata
  */
 model File {
-  id           Int      @id @default(autoincrement())
-  url          String
-  filename     String
-  mimeType     String
-  size         Int?
-  checksum     String?
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
-  uploadedById Int?
-  provider     String? // s3, gcs, local, etc.
-  createdAt    DateTime @default(now())
+  id            Int                @id @default(autoincrement())
+  filename      String
+  url           String
+  mimeType      String?
+  size          Int?
+  uploadedBy    User?              @relation(fields: [uploadedById], references: [id])
+  uploadedById  Int?
+  provider      String? // s3, gcs, local, etc.
+  createdAt     DateTime           @default(now())
 
   personnelContracts PersonnelContract[]
   clientContracts    ClientContract[]
   contractExtensions ContractExtension[]
   companies          Company[]
+  personnel          Personnel?         @relation("PersonnelFile")  // New: one-to-one relation
 
   @@index([filename])
   ClientContact ClientContact[]
+  Personnel Personnel[] @relation("PersonnelIdPicture")
 }
 
 /**

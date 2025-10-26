@@ -31,6 +31,9 @@ CREATE TYPE "public"."RateSource" AS ENUM ('MANUAL', 'API');
 -- CreateEnum
 CREATE TYPE "public"."ContractStatus" AS ENUM ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'CONFIRMED', 'REJECTED');
 
+-- CreateEnum
+CREATE TYPE "public"."IdentifierType" AS ENUM ('NATIONAL_ID', 'PASSPORT', 'RESIDENCE_PERMIT');
+
 -- CreateTable
 CREATE TABLE "public"."Company" (
     "id" SERIAL NOT NULL,
@@ -152,13 +155,16 @@ CREATE TABLE "public"."Personnel" (
     "firstName" TEXT NOT NULL,
     "lastName" TEXT NOT NULL,
     "identifier" TEXT,
+    "identifierType" "public"."IdentifierType",
     "email" TEXT,
     "phone" TEXT,
-    "hireDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "baseSalary" DECIMAL(16,2) NOT NULL,
+    "idPictureId" INTEGER,
+    "hireDate" TIMESTAMP(3),
+    "baseSalary" DECIMAL(10,2) NOT NULL,
     "serviceId" INTEGER,
+    "fileId" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
     "deletedAt" TIMESTAMP(3),
 
@@ -429,11 +435,10 @@ CREATE TABLE "public"."PaymentRecord" (
 -- CreateTable
 CREATE TABLE "public"."File" (
     "id" SERIAL NOT NULL,
-    "url" TEXT NOT NULL,
     "filename" TEXT NOT NULL,
-    "mimeType" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "mimeType" TEXT,
     "size" INTEGER,
-    "checksum" TEXT,
     "uploadedById" INTEGER,
     "provider" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -585,10 +590,10 @@ CREATE INDEX "Service_companyId_idx" ON "public"."Service"("companyId");
 CREATE INDEX "Service_name_idx" ON "public"."Service"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Personnel_identifier_key" ON "public"."Personnel"("identifier");
+CREATE UNIQUE INDEX "Personnel_idPictureId_key" ON "public"."Personnel"("idPictureId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Personnel_email_key" ON "public"."Personnel"("email");
+CREATE UNIQUE INDEX "Personnel_fileId_key" ON "public"."Personnel"("fileId");
 
 -- CreateIndex
 CREATE INDEX "Personnel_companyId_idx" ON "public"."Personnel"("companyId");
@@ -801,7 +806,13 @@ ALTER TABLE "public"."Service" ADD CONSTRAINT "Service_companyId_fkey" FOREIGN K
 ALTER TABLE "public"."Personnel" ADD CONSTRAINT "Personnel_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "public"."Personnel" ADD CONSTRAINT "Personnel_idPictureId_fkey" FOREIGN KEY ("idPictureId") REFERENCES "public"."File"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "public"."Personnel" ADD CONSTRAINT "Personnel_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "public"."Service"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."Personnel" ADD CONSTRAINT "Personnel_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "public"."File"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."PersonnelContract" ADD CONSTRAINT "PersonnelContract_personnelId_fkey" FOREIGN KEY ("personnelId") REFERENCES "public"."Personnel"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
