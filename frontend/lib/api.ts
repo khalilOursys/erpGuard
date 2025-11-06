@@ -115,13 +115,13 @@ const api = {
   },
 
   // PUT (JSON)
-async put<T = Json>(url: string, body?: any): Promise<T> {
-  const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
-  return this.request<T>(url, {
-    method: "PUT",
-    body: payload,
-  });
-},
+  async put<T = Json>(url: string, body?: any): Promise<T> {
+    const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
+    return this.request<T>(url, {
+      method: "PUT",
+      body: payload,
+    });
+  },
 
   // PATCH (JSON)
   async patch<T = Json>(url: string, body?: any): Promise<T> {

@@ -1,7 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
+@import 'ag-grid-community/styles/ag-grid.css';
+@import 'ag-grid-community/styles/ag-theme-alpine.css'; /* Or ag-theme-quartz for Shadcn-like */
 :root {
   /* Soft off-white instead of pure white */
   --card: 30 10% 95%;
@@ -107,7 +108,24 @@ body {
   background: hsl(var(--accent-foreground));
 }
 
+.ag-header-cell-label .ag-header-cell-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg); /* Adjust rotation as needed */
+  white-space: nowrap;
+  text-align: center;
+}
 
+.vertical-header {
+  width: 100px !important; /* Compact */
+  min-width: 50px !important;
+}
+
+
+.ag-row .span-row {
+  text-align: center;
+  font-weight: bold;
+  background-color: #f0f0f0;
+}
 
 @layer base {
   :root {

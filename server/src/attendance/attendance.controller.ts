@@ -1,88 +1,49 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-} from '@nestjs/common';
+// src/attendance/attendance.controller.ts
+import { Controller, Get, Patch, Body, Req, Query, UseGuards, BadRequestException, Delete, Param, ParseIntPipe } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { CreateAttendanceDto } from './dto/create-attendance.dto';
-import {
-  BulkUpdateAttendanceDto,
-  UpdateAttendanceDto,
-} from './dto/update-attendance.dto';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { PermissionsGuard } from 'src/common/guards/permissions.guard';
+import { Permissions } from 'src/common/decorators/permissions.decorator';
 
-@Controller('missions/:missionId/attendance')
+@Controller('attendance')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(private readonly service: AttendanceService) {}
 
-  @Get()
-  async getAttendanceByMission(
-    @Param('missionId') missionId: number,
-    @Query('companyId') companyId: number,
+  @Permissions('attendance.read')
+  @Get('grid')
+  async getGrid(
+    @Req() req: any,
+    @Query('startDate') startDateStr: string,
+    @Query('endDate') endDateStr: string,
   ) {
-    return this.attendanceService.getAttendanceByMission(missionId, companyId);
+    const companyId = req.user.companyId;
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      throw new BadRequestException('Invalid dates');
+    }
+    return this.service.getGridData(companyId, startDate, endDate);
   }
 
-  @Get('summary')
-  async getAttendanceSummary(
-    @Param('missionId') missionId: number,
-    @Query('companyId') companyId: number,
+  @Permissions('attendance.manage')
+  @Patch('update')
+  async update(
+    @Req() req: any,
+    @Body() body: any, // { contractSiteServiceId, postIndex, date, status, personnelId?, isAddingReplacement? }
   ) {
-    return this.attendanceService.getAttendanceSummary(missionId, companyId);
+    const companyId = req.user.companyId;
+    const userId = req.user.id;
+    return this.service.updateAttendance(companyId, userId, body);
   }
 
-  @Post()
-  async createAttendance(
-    @Query('companyId') companyId: number,
-    @Body() createAttendanceDto: CreateAttendanceDto,
+  @Permissions('attendance.manage')
+  @Delete('assignment/:id')
+  async deleteAssignment(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.attendanceService.createAttendance(
-      companyId,
-      createAttendanceDto,
-    );
-  }
-
-  @Get(':attendanceId')
-  async getAttendanceById(
-    @Param('attendanceId') attendanceId: number,
-    @Query('companyId') companyId: number,
-  ) {
-    return this.attendanceService.getAttendanceById(attendanceId, companyId);
-  }
-
-  @Put(':attendanceId')
-  async updateAttendance(
-    @Param('attendanceId') attendanceId: number,
-    @Query('companyId') companyId: number,
-    @Body() updateAttendanceDto: UpdateAttendanceDto,
-  ) {
-    return this.attendanceService.updateAttendance(
-      attendanceId,
-      companyId,
-      updateAttendanceDto,
-    );
-  }
-
-  @Put('bulk/update')
-  async bulkUpdateAttendance(
-    @Query('companyId') companyId: number,
-    @Body() bulkUpdateDto: BulkUpdateAttendanceDto,
-  ) {
-    return this.attendanceService.bulkUpdateAttendance(
-      companyId,
-      bulkUpdateDto,
-    );
-  }
-
-  @Delete(':attendanceId')
-  async deleteAttendance(
-    @Param('attendanceId') attendanceId: number,
-    @Query('companyId') companyId: number,
-  ) {
-    return this.attendanceService.deleteAttendance(attendanceId, companyId);
+    const companyId = req.user.companyId;
+    return this.service.deleteAssignment(companyId, id);
   }
 }

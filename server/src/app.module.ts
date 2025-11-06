@@ -13,14 +13,12 @@ import { ClientModule } from './clients/client.module';
 import { LocationsModule } from './locations/locations.module';
 import { ContractModule } from './contracts/contract.module';
 import { NotificationModule } from './notifications/notification.module';
-import { MissionModule } from './missions/mission.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { ServiceModule } from './service/service.module';
 import { FilesModule } from './files/files.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { SitesModule } from './sites/sites.module';
-import { BillingModule } from './billing/billing.module';
 import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
@@ -34,12 +32,11 @@ import { AttendanceModule } from './attendance/attendance.module';
     ContractModule,
     PersonnelModule,
     NotificationModule,
-    MissionModule,
     AuditLogModule,
     SitesModule,
     ServiceModule,
+    AttendanceModule,
     FilesModule,
-    BillingModule,
     ServeStaticModule.forRoot(
       {
         rootPath: join(process.cwd(), 'uploads/idpapers'),
