@@ -603,21 +603,6 @@ export class ContractService {
 
     const where = { contractId, companyId };
 
-    const total = await this.prisma.mission.count({ where });
-    const data = await this.prisma.mission.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { startDate: 'desc' },
-      include: {
-        requirements: { include: { service: true } },
-        assignments: { include: { personnel: true } },
-        site: true,
-        contract: { select: { id: true, contractNumber: true } },
-      },
-    });
-
-    return { total, page, pageSize, data };
   }
 
   async submitForReview(companyId: number, id: number, actorUserId: number) {
@@ -728,41 +713,6 @@ export class ContractService {
         // choose manager: submittedById if exists, else confirmer
         const managerId = contract.submittedById ?? confirmerUserId;
 
-        const mission = await tx.mission.create({
-          data: {
-            contractId: contract.id,
-            siteId: cSite.siteId,
-            startDate: contract.startDate,
-            endDate: contract.endDate,
-            requiredPersonnel: requiredPersonnel || 0,
-            extraPersonnelSlots: 0,
-            managerId,
-            companyId: contract.companyId,
-          },
-        });
-
-        // create MissionServiceRequirement rows from cSite.services.
-        for (const s of cSite.services || []) {
-          // find contract-level service rate to fallback if needed
-          const contractLevel = [].find((r) => r.serviceId === s.serviceId);
-
-          const basePay = s.basePay ?? contractLevel?.basePay ?? 0;
-          const extraPay = s.extraPay ?? contractLevel?.extraPay ?? 0;
-          const clientPrice = s.clientPrice ?? contractLevel?.clientPrice ?? 0;
-
-          await tx.missionServiceRequirement.create({
-            data: {
-              missionId: mission.id,
-              serviceId: s.serviceId,
-              requiredCount: s.requiredCount ?? 1,
-              basePay,
-              extraPay,
-              clientPrice,
-            },
-          });
-        }
-
-        missionsCreated.push(mission);
       }
 
       return {

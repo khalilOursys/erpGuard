@@ -72,14 +72,14 @@ export default function Sidebar() {
           </Button>
         </Link> */}
 
-        {/* Missions Section */}
-        <Link href="/missions">
+        {/* Attendance Section */}
+        <Link href="/attendance">
           <Button
             variant="ghost"
             className={`w-full justify-start ${collapsed ? "px-2" : ""}`}
           >
             <Target className="mr-2 h-4 w-4" />
-            {!collapsed && "Missions"}
+            {!collapsed && "Attendance"}
           </Button>
         </Link>
 

@@ -149,7 +149,7 @@ const onSubmit = async (data: z.infer<typeof personnelSchema>) => {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="identifier">Identifier (optional)</Label>
+        <Label htmlFor="identifier">Identifier</Label>
         <Input
           id="identifier"
           {...form.register("identifier")}

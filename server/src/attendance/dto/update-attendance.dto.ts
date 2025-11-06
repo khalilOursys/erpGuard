@@ -1,21 +1,22 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateAttendanceDto } from './create-attendance.dto';
-import { IsInt, IsNotEmpty } from 'class-validator';
-import { Type } from 'class-transformer';
+// src/attendance/dto/update-attendance.dto.ts
+import { IsDateString, IsEnum, IsOptional, IsNumber, IsObject } from 'class-validator';
+import { AttendanceStatus } from '@prisma/client';
 
-export class UpdateAttendanceDto extends PartialType(CreateAttendanceDto) {}
+export class UpdateAttendanceDto {
+  @IsDateString()
+  date: string;
 
-export class BulkUpdateAttendanceItemDto {
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsInt()
-  attendanceId!: number;
+  @IsOptional()
+  @IsNumber()
+  personnelId?: number;
 
-  @IsNotEmpty()
-  data!: UpdateAttendanceDto;
-}
+  @IsEnum(AttendanceStatus)
+  status: AttendanceStatus;
 
-export class BulkUpdateAttendanceDto {
-  @IsNotEmpty()
-  attendanceUpdates!: BulkUpdateAttendanceItemDto[];
+  @IsOptional()
+  @IsObject()
+  addReplacement?: {
+    personnelId: number;
+    status: AttendanceStatus;
+  };
 }
