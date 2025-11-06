@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { AgGridReact } from "@ag-grid-community/react";
-import type { ColDef, ICellEditorParams, NewValueParams, ICellRendererParams } from "@ag-grid-community/core";
+import type { ColDef, ICellEditorParams, NewValueParams, ICellRendererParams, RowNode } from "@ag-grid-community/core";
 import { ClientSideRowModelModule } from "@ag-grid-community/client-side-row-model";
 import "@ag-grid-community/styles/ag-grid.css";
 import "@ag-grid-community/styles/ag-theme-alpine.css";
@@ -105,18 +105,20 @@ export default function AttendancePage() {
       const personnel = personnelList.find((p) => `${p.firstName} ${p.lastName}` === params.newValue);
       if (!personnel) {
         toast.error("Invalid personnel selected");
-        params.api.undoLastCellEdit();
+        if (params.node) {
+          params.node.setDataValue(field, params.oldValue);
+        }
         return;
       }
 
       const body: any = {
         personnelId: personnel.id,
       };
-      if (row.assignmentId) {
+      if (row?.assignmentId) {
         body.assignmentId = row.assignmentId;
       } else {
-        body.contractSiteServiceId = row.contractSiteServiceId!;
-        body.postIndex = row.postIndex!;
+        body.contractSiteServiceId = row?.contractSiteServiceId!;
+        body.postIndex = row?.postIndex!;
       }
 
       try {
@@ -124,9 +126,11 @@ export default function AttendancePage() {
         toast.success("Personnel updated successfully");
         row.identification = personnel.identifier;
         params.api.applyTransaction({ update: [row] });
-      } catch (err) {
-        toast.error(err?.response?.data?.message || "Update failed");
-        params.api.undoLastCellEdit();
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || "Update failed");
+        if (params.node) {
+          params.node.setDataValue(field, params.oldValue);
+        }
       }
     }
   };
@@ -139,7 +143,7 @@ export default function AttendancePage() {
     }
 
     const assignmentIds = selectedNodes
-      .map((node) => node.data.assignmentId)
+      .map((node) => node.data?.assignmentId)
       .filter((id): id is number => !!id);
 
     if (assignmentIds.length === 0) {
@@ -198,7 +202,10 @@ export default function AttendancePage() {
         field: dateStr,
         width: 120,
         headerClass: 'vertical-header text-center',
-        editable: (params) => params.data[dateStr]?.editable ?? false,
+        editable: (params) => {
+          const value = params.data?.[dateStr];
+          return (typeof value === 'object' && value !== null && 'editable' in value && value.editable) ?? false;
+        },
         cellRenderer: StatusCellRenderer,
         cellEditor: CustomStatusEditor,
         cellEditorPopup: true,
@@ -310,16 +317,16 @@ const CustomStatusEditor = forwardRef((props: ICellEditorParams<GridRow, { statu
         isAddingReplacement: addReplacement,
       };
 
-      if (props.node.data!.assignmentId) {
-        body.assignmentId = props.node.data!.assignmentId;
+      if (props.node.data?.assignmentId) {
+        body.assignmentId = props.node.data.assignmentId;
       } else {
-        body.contractSiteServiceId = props.node.data!.contractSiteServiceId!;
-        body.postIndex = props.node.data!.postIndex!;
+        body.contractSiteServiceId = props.node.data?.contractSiteServiceId!;
+        body.postIndex = props.node.data?.postIndex!;
       }
 
       if (addReplacement) {
         body.personnelId = replacementPersonnelId;
-        body.replacementForId = props.node.data!.assignmentId;
+        body.replacementForId = props.node.data?.assignmentId;
       }
 
       await api.patch("/attendance/update", body);
@@ -334,8 +341,8 @@ const CustomStatusEditor = forwardRef((props: ICellEditorParams<GridRow, { statu
       }
 
       props.stopEditing(false);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Update failed");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Update failed");
       props.stopEditing(true); // Cancel editing
     }
   };
