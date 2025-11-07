@@ -317,7 +317,7 @@ async function main() {
   const cityB = await ensureCity('Rivertown', 'State B', 'Freedonia');
 
   async function ensureClient(name: string, type: string) {
-    const existing = await prisma.client.findFirst({ where: { name, companyId: company.id } });
+    const existing = await prisma.client.findFirst({ where: { name, companyId: 1 } });
     if (existing) return existing;
     return prisma.client.create({
       data: { name, type: type as any, companyId: 1 },
@@ -358,7 +358,7 @@ async function main() {
   // 9) Client contract + per-site services (with pricing & counts)
   // -----------------------------
   const existingContract = await prisma.clientContract.findFirst({
-    where: { clientId: acme.id, companyId: company.id },
+    where: { clientId: acme.id, companyId: 1 },
   });
 
   let contract;
@@ -369,7 +369,7 @@ async function main() {
         contractNumber: `CTR-ACME-${new Date().toISOString().slice(0,10)}`,
         startDate: new Date(),
         endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30 * 6), // +6 months
-        companyId: company.id,
+        companyId: 1,
         status: 'CONFIRMED',
         submittedById: managerUser.id,
         submittedAt: new Date(),
@@ -507,7 +507,7 @@ async function main() {
     });
   }
 
-  const invoice = await ensureBilling(`INV-${new Date().toISOString().slice(0,10)}-001`, acme.id, company.id, contract.id, new Date(Date.now() - 1000 * 60 * 60 * 24 * 30), new Date());
+  const invoice = await ensureBilling(`INV-${new Date().toISOString().slice(0,10)}-001`, acme.id, 11, contract.id, new Date(Date.now() - 1000 * 60 * 60 * 24 * 30), new Date());
 
   // Create billing lines for each contract site service (reflect clientPrice * requiredCount)
   const existingLines = await prisma.billingLine.findMany({ where: { billingId: invoice.id } });
@@ -586,7 +586,7 @@ async function main() {
         userId: adminUser.id,
         action: 'CREATE',
         entity: 'Company',
-        entityId: company.id,
+        entityId: 1,
         previousData: null,
         newData: { name: company.name },
         timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 10),
