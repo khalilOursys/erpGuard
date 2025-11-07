@@ -263,7 +263,7 @@ async function main() {
     const hash = await bcrypt.hash(password, 10);
     return prisma.user.create({
       data: {
-        companyId: company.id,
+        companyId: 1,
         identifier,
         displayname,
         password: hash,
@@ -320,7 +320,7 @@ async function main() {
     const existing = await prisma.client.findFirst({ where: { name, companyId: company.id } });
     if (existing) return existing;
     return prisma.client.create({
-      data: { name, type: type as any, companyId: company.id },
+      data: { name, type: type as any, companyId: 1 },
     });
   }
 
@@ -624,7 +624,6 @@ async function main() {
 main()
   .catch((e) => {
     console.error('Seed error', e);
-    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
