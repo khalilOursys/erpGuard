@@ -130,7 +130,7 @@ interface CreateBillingData {
   columnConfigs?: ColumnConfig[]; // Add column configuration
 }
 
-// API functions (same as before)
+// API functions (updated to include services)
 const invoiceApi = {
   createInvoice: async (data: CreateBillingData, token: string | null) => {
     if (!token) throw new Error("Authentication required");
@@ -214,6 +214,26 @@ const invoiceApi = {
     if (!response.ok) throw new Error("Failed to fetch missions");
     return response.json();
   },
+
+  getAllServices: async (
+    companyId: number,
+    token: string | null
+  ): Promise<Service[]> => {
+    if (!token) throw new Error("Authentication required");
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    if (!API_URL) throw new Error("API URL not configured");
+
+    const response = await fetch(
+      `${API_URL}/services/findAllServices?companyId=${companyId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (!response.ok) throw new Error("Failed to fetch services");
+    return response.json();
+  },
 };
 
 export default function AddInvoice() {
@@ -224,7 +244,9 @@ export default function AddInvoice() {
   const [clients, setClients] = useState<Client[]>([]);
   const [contracts, setContracts] = useState<ClientContract[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
-  const [addedMissionIds, setAddedMissionIds] = useState<number[]>([]);
+  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [selectedMissionIds, setSelectedMissionIds] = useState<number[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
     clientId: 0,
@@ -333,10 +355,10 @@ export default function AddInvoice() {
     fetchContracts();
   }, [formData.clientId, token]);
 
-  // Fetch missions when period changes
+  // Fetch missions when contract changes
   useEffect(() => {
     const fetchMissions = async () => {
-      if (formData.contractId <= 0) return;
+      if (formData.contractId <= 0 || !token) return;
 
       try {
         const missionsData = await invoiceApi.getMissionsForBilling(
@@ -344,16 +366,33 @@ export default function AddInvoice() {
           token
         );
         setMissions(missionsData);
-        setAddedMissionIds([]); // Reset added missions when missions change
+        setSelectedMissionIds([]); // Reset selected missions when missions change
       } catch (error) {
         console.error("Error fetching missions:", error);
         setMissions([]);
-        setAddedMissionIds([]);
+        setSelectedMissionIds([]);
       }
     };
 
     fetchMissions();
   }, [formData.contractId, token]);
+
+  // Fetch all services when company is available
+  useEffect(() => {
+    const fetchServices = async () => {
+      if (!companyId || !token) return;
+
+      try {
+        const servicesData = await invoiceApi.getAllServices(companyId, token);
+        setAllServices(servicesData);
+      } catch (error) {
+        console.error("Error fetching services:", error);
+        showAlert("Failed to load services", "error");
+      }
+    };
+
+    fetchServices();
+  }, [companyId, token]);
 
   const showAlert = useCallback(
     (message: string, type: "success" | "error") => {
@@ -372,67 +411,80 @@ export default function AddInvoice() {
     );
   }, []);
 
-  // Add mission with all services
-  const addMissionWithServices = useCallback((mission: Mission) => {
+  // Handle mission selection change
+  const handleMissionSelectionChange = useCallback((missionIds: number[]) => {
+    setSelectedMissionIds(missionIds);
+  }, []);
+
+  // Handle service selection change
+  const handleServiceSelectionChange = useCallback((serviceIds: number[]) => {
+    setSelectedServiceIds(serviceIds);
+  }, []);
+
+  // Generate billing lines based on selected missions and services
+  const generateBillingLines = useCallback(() => {
     const newLines: BillingLine[] = [];
 
-    // Add mission personnel line
-    const missionLine: BillingLine = {
-      id: Date.now(),
-      billingId: 0,
-      lineType: "MISSION",
-      description: `Mission ${mission.id} - Personnel`,
-      missionId: mission.id,
-      personnelCount: mission.requiredPersonnel,
-      quantity: 1,
-      unitPriceBase: 100, // Default price - should come from contract
-      lineTotalBase: mission.requiredPersonnel * 100,
-      discountPercent: 0,
-      discountAmountBase: 0,
-      totalAfterDiscountBase: mission.requiredPersonnel * 100,
-      taxPercent: 0,
-      taxAmountBase: 0,
-      mission,
-    };
-    newLines.push(missionLine);
-
-    // Add all service lines for this mission
-    if (mission.requirements) {
-      mission.requirements.forEach((serviceReq, index) => {
-        console.log(serviceReq);
-
-        const serviceLine: BillingLine = {
-          id: Date.now() + serviceReq.id + index, // Ensure unique ID
+    // Add selected missions as MISSION type lines
+    selectedMissionIds.forEach((missionId) => {
+      const mission = missions.find((m) => m.id === missionId);
+      if (mission) {
+        const missionLine: BillingLine = {
+          id: Date.now() + missionId,
           billingId: 0,
-          lineType: "SERVICE",
-          description: `Mission ${mission.id} - ${serviceReq.service.name}`,
+          lineType: "MISSION",
+          description: `Mission ${mission.id} - Personnel`,
           missionId: mission.id,
-          missionServiceRequirementId: serviceReq.id,
-          missionServiceRequirement: serviceReq,
-          serviceId: serviceReq.serviceId,
-          personnelCount: 1,
-          quantity: serviceReq.quantity,
-          unitPriceBase: serviceReq.unitPrice,
-          lineTotalBase: serviceReq.totalPrice,
+          personnelCount: mission.requiredPersonnel,
+          quantity: 1,
+          unitPriceBase: 100, // Default price - should come from contract
+          lineTotalBase: mission.requiredPersonnel * 100,
           discountPercent: 0,
           discountAmountBase: 0,
-          totalAfterDiscountBase: serviceReq.totalPrice,
+          totalAfterDiscountBase: mission.requiredPersonnel * 100,
+          taxPercent: 0,
+          taxAmountBase: 0,
+          mission,
+        };
+        newLines.push(missionLine);
+      }
+    });
+
+    // Add selected services as SERVICE type lines
+    selectedServiceIds.forEach((serviceId) => {
+      const service = allServices.find((s) => s.id === serviceId);
+      if (service) {
+        const serviceLine: BillingLine = {
+          id: Date.now() + serviceId + 100000, // Ensure unique ID
+          billingId: 0,
+          lineType: "SERVICE",
+          description: service.name,
+          serviceId: service.id,
+          personnelCount: 1,
+          quantity: 1,
+          unitPriceBase: service.unitPrice,
+          lineTotalBase: service.unitPrice,
+          discountPercent: 0,
+          discountAmountBase: 0,
+          totalAfterDiscountBase: service.unitPrice,
           taxPercent: 0,
           taxAmountBase: 0,
         };
         newLines.push(serviceLine);
-      });
+      }
+    });
+
+    setLines(newLines);
+  }, [selectedMissionIds, selectedServiceIds, missions, allServices]);
+
+  // Update billing lines when selections change
+  useEffect(() => {
+    if (selectedMissionIds.length > 0 || selectedServiceIds.length > 0) {
+      generateBillingLines();
+    } else {
+      setLines([]);
     }
-
-    setLines((prev) => [...prev, ...newLines]);
-    setAddedMissionIds((prev) => [...prev, mission.id]);
-  }, []);
-
-  // Remove mission and all its services
-  const removeMissionWithServices = useCallback((missionId: number) => {
-    setLines((prev) => prev.filter((line) => line.missionId !== missionId));
-    setAddedMissionIds((prev) => prev.filter((id) => id !== missionId));
-  }, []);
+  }, [selectedMissionIds, selectedServiceIds, generateBillingLines]);
 
   const addCustomLine = useCallback(() => {
     const newLine: BillingLine = {
@@ -492,16 +544,18 @@ export default function AddInvoice() {
       const lineToRemove = prev[index];
       const newLines = prev.filter((_, i) => i !== index);
 
-      // Check if this was the last line for a mission
-      if (lineToRemove.missionId) {
-        const missionLinesCount = newLines.filter(
-          (line) => line.missionId === lineToRemove.missionId
-        ).length;
-        if (missionLinesCount === 0) {
-          setAddedMissionIds((prev) =>
-            prev.filter((id) => id !== lineToRemove.missionId)
-          );
-        }
+      // If it's a mission line, remove from selected missions
+      if (lineToRemove.lineType === "MISSION" && lineToRemove.missionId) {
+        setSelectedMissionIds((prev) =>
+          prev.filter((id) => id !== lineToRemove.missionId)
+        );
+      }
+
+      // If it's a service line, remove from selected services
+      if (lineToRemove.lineType === "SERVICE" && lineToRemove.serviceId) {
+        setSelectedServiceIds((prev) =>
+          prev.filter((id) => id !== lineToRemove.serviceId)
+        );
       }
 
       return newLines;
@@ -599,21 +653,10 @@ export default function AddInvoice() {
 
   const { subtotal, taxTotal, total } = calculateTotals();
 
-  // Group lines by mission for better display
-  const groupedLines = lines.reduce((acc, line) => {
-    if (line.missionId) {
-      if (!acc[line.missionId]) {
-        acc[line.missionId] = [];
-      }
-      acc[line.missionId].push(line);
-    } else {
-      if (!acc.custom) {
-        acc.custom = [];
-      }
-      acc.custom.push(line);
-    }
-    return acc;
-  }, {} as { [key: string]: BillingLine[] });
+  // Group lines by type for better display
+  const missionLines = lines.filter((line) => line.lineType === "MISSION");
+  const serviceLines = lines.filter((line) => line.lineType === "SERVICE");
+  const customLines = lines.filter((line) => line.lineType === "CUSTOM");
 
   return (
     <div className="space-y-6">
@@ -741,98 +784,183 @@ export default function AddInvoice() {
             </div>
           </div>
 
-          {/* Available Missions in Table Format */}
+          {/* Mission Selection */}
           {missions.length > 0 && (
             <div className="space-y-4">
-              <Label>Available Missions for Selected Period</Label>
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mission ID</TableHead>
-                      <TableHead>Contract</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead>Personnel</TableHead>
-                      <TableHead>Services</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {missions.map((mission) => {
-                      const isAdded = addedMissionIds.includes(mission.id);
-                      const serviceCount = mission.requirements?.length || 0;
-
-                      return (
-                        <TableRow key={mission.id}>
-                          <TableCell className="font-medium">
-                            Mission {mission.id}
-                          </TableCell>
-                          <TableCell>
-                            {mission.contract.contractNumber}
-                          </TableCell>
-                          <TableCell>
-                            {format(
-                              new Date(mission.startDate),
-                              "MMM dd, yyyy"
-                            )}{" "}
-                            -{" "}
-                            {format(new Date(mission.endDate), "MMM dd, yyyy")}
-                          </TableCell>
-                          <TableCell>{mission.requiredPersonnel}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div>{serviceCount} services</div>
-                              {mission.requirements && (
-                                <div className="text-xs text-gray-500">
-                                  {mission.requirements
-                                    .map((sr) => sr.service.name)
-                                    .join(", ")}
-                                </div>
+              <Label>Select Missions</Label>
+              <div className="relative">
+                <Select
+                  onValueChange={(value) => {
+                    const missionId = parseInt(value);
+                    if (!selectedMissionIds.includes(missionId)) {
+                      handleMissionSelectionChange([
+                        ...selectedMissionIds,
+                        missionId,
+                      ]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose missions to add..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {missions
+                      .filter(
+                        (mission) => !selectedMissionIds.includes(mission.id)
+                      )
+                      .map((mission) => (
+                        <SelectItem
+                          key={mission.id}
+                          value={mission.id.toString()}
+                        >
+                          <div>
+                            <div>Mission {mission.id}</div>
+                            <div className="text-sm text-gray-500">
+                              {mission.contract.contractNumber} -{" "}
+                              {format(
+                                new Date(mission.startDate),
+                                "MMM dd, yyyy"
+                              )}{" "}
+                              to{" "}
+                              {format(
+                                new Date(mission.endDate),
+                                "MMM dd, yyyy"
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            {isAdded ? (
-                              <Badge
-                                variant="default"
-                                className="bg-green-100 text-green-800"
-                              >
-                                Added ({1 + serviceCount} lines)
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">Not Added</Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Selected Missions Display */}
+              {selectedMissionIds.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Selected Missions ({selectedMissionIds.length})</Label>
+                  <div className="border rounded-lg p-3 space-y-2">
+                    {selectedMissionIds.map((missionId) => {
+                      const mission = missions.find((m) => m.id === missionId);
+                      return (
+                        <div
+                          key={missionId}
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                        >
+                          <div>
+                            <div className="font-medium">
+                              Mission {missionId}
+                            </div>
+                            {mission && (
+                              <div className="text-sm text-gray-500">
+                                {mission.contract.contractNumber} -{" "}
+                                {mission.requiredPersonnel} personnel
+                              </div>
                             )}
-                          </TableCell>
-                          <TableCell>
-                            {isAdded ? (
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
-                                onClick={() =>
-                                  removeMissionWithServices(mission.id)
-                                }
-                              >
-                                Remove Mission
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                onClick={() => addMissionWithServices(mission)}
-                              >
-                                Add Mission ({1 + serviceCount} lines)
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              handleMissionSelectionChange(
+                                selectedMissionIds.filter(
+                                  (id) => id !== missionId
+                                )
+                              );
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
                       );
                     })}
-                  </TableBody>
-                </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Service Selection */}
+          {allServices.length > 0 && (
+            <div className="space-y-4">
+              <Label>Select Additional Services</Label>
+              <div className="relative">
+                <Select
+                  onValueChange={(value) => {
+                    const serviceId = parseInt(value);
+                    if (!selectedServiceIds.includes(serviceId)) {
+                      handleServiceSelectionChange([
+                        ...selectedServiceIds,
+                        serviceId,
+                      ]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose services to add..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allServices
+                      .filter(
+                        (service) => !selectedServiceIds.includes(service.id)
+                      )
+                      .map((service) => (
+                        <SelectItem
+                          key={service.id}
+                          value={service.id.toString()}
+                        >
+                          <div>
+                            <div>{service.name}</div>
+                            <div className="text-sm text-gray-500">
+                              ${service.unitPrice} - {service.description}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
+
+              {/* Selected Services Display */}
+              {selectedServiceIds.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Selected Services ({selectedServiceIds.length})</Label>
+                  <div className="border rounded-lg p-3 space-y-2">
+                    {selectedServiceIds.map((serviceId) => {
+                      const service = allServices.find(
+                        (s) => s.id === serviceId
+                      );
+                      return (
+                        <div
+                          key={serviceId}
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                        >
+                          <div>
+                            <div className="font-medium">{service?.name}</div>
+                            <div className="text-sm text-gray-500">
+                              ${service?.unitPrice} - {service?.description}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              handleServiceSelectionChange(
+                                selectedServiceIds.filter(
+                                  (id) => id !== serviceId
+                                )
+                              );
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -870,408 +998,539 @@ export default function AddInvoice() {
 
             {lines.length === 0 ? (
               <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
-                No lines added. Add missions or custom lines.
+                No lines added. Select missions or services above.
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Grouped by Mission */}
-                {Object.entries(groupedLines).map(
-                  ([missionId, missionLines]) => {
-                    if (missionId === "custom") {
-                      return (
-                        <div key="custom">
-                          <h4 className="font-semibold mb-2">Custom Lines</h4>
-                          <div className="border rounded-lg">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  {columns.find((col) => col.key === "type")
-                                    ?.visible && <TableHead>Type</TableHead>}
-                                  {columns.find(
-                                    (col) => col.key === "description"
-                                  )?.visible && (
-                                    <TableHead>Description</TableHead>
-                                  )}
-                                  {columns.find((col) => col.key === "quantity")
-                                    ?.visible && <TableHead>Qty</TableHead>}
-                                  {columns.find(
-                                    (col) => col.key === "unitPrice"
-                                  )?.visible && (
-                                    <TableHead>Unit Price</TableHead>
-                                  )}
-                                  {columns.find(
-                                    (col) => col.key === "personnel"
-                                  )?.visible && (
-                                    <TableHead>Personnel</TableHead>
-                                  )}
-                                  {columns.find((col) => col.key === "discount")
-                                    ?.visible && (
-                                    <TableHead>Discount %</TableHead>
-                                  )}
-                                  {columns.find((col) => col.key === "tax")
-                                    ?.visible && <TableHead>Tax %</TableHead>}
-                                  {columns.find((col) => col.key === "total")
-                                    ?.visible && <TableHead>Total</TableHead>}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {missionLines.map((line, index) => {
-                                  const globalIndex = lines.findIndex(
-                                    (l) => l.id === line.id
-                                  );
-                                  return (
-                                    <TableRow key={line.id}>
-                                      {columns.find((col) => col.key === "type")
-                                        ?.visible && (
-                                        <TableCell>
-                                          <Badge
-                                            variant={
-                                              line.lineType === "MISSION"
-                                                ? "default"
-                                                : "secondary"
-                                            }
-                                          >
-                                            {line.lineType}
-                                          </Badge>
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "description"
-                                      )?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            value={line.description}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                description: e.target.value,
-                                              })
-                                            }
-                                            className="border-0 focus-visible:ring-1"
-                                            required
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "quantity"
-                                      )?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            type="number"
-                                            min="1"
-                                            value={line.quantity}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                quantity:
-                                                  parseInt(e.target.value) || 1,
-                                              })
-                                            }
-                                            className="w-20 border-0 focus-visible:ring-1"
-                                            required
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "unitPrice"
-                                      )?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={line.unitPriceBase}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                unitPriceBase:
-                                                  parseFloat(e.target.value) ||
-                                                  0,
-                                              })
-                                            }
-                                            className="w-24 border-0 focus-visible:ring-1"
-                                            required
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "personnel"
-                                      )?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            type="number"
-                                            min="1"
-                                            value={line.personnelCount}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                personnelCount:
-                                                  parseInt(e.target.value) || 1,
-                                              })
-                                            }
-                                            className="w-20 border-0 focus-visible:ring-1"
-                                            required
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "discount"
-                                      )?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            max="100"
-                                            value={line.discountPercent || ""}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                discountPercent:
-                                                  parseFloat(e.target.value) ||
-                                                  0,
-                                              })
-                                            }
-                                            className="w-20 border-0 focus-visible:ring-1"
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find((col) => col.key === "tax")
-                                        ?.visible && (
-                                        <TableCell>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={line.taxPercent || ""}
-                                            onChange={(e) =>
-                                              updateLine(globalIndex, {
-                                                taxPercent:
-                                                  parseFloat(e.target.value) ||
-                                                  0,
-                                              })
-                                            }
-                                            className="w-20 border-0 focus-visible:ring-1"
-                                          />
-                                        </TableCell>
-                                      )}
-                                      {columns.find(
-                                        (col) => col.key === "total"
-                                      )?.visible && (
-                                        <TableCell className="font-medium">
-                                          $
-                                          {line.totalAfterDiscountBase.toFixed(
-                                            2
-                                          )}
-                                        </TableCell>
-                                      )}
-                                    </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      );
-                    }
-                    const mission = missions.find(
-                      (m) => m.id === parseInt(missionId)
-                    );
-                    return (
-                      <div key={missionId}>
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">
-                            Mission {missionId} - {missionLines.length} lines
-                            {mission && (
-                              <span className="text-sm font-normal text-gray-600 ml-2">
-                                ({mission.requiredPersonnel} personnel +{" "}
-                                {missionLines.length - 1} services)
-                              </span>
-                            )}
-                          </h4>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() =>
-                              removeMissionWithServices(parseInt(missionId))
-                            }
-                          >
-                            Remove Entire Mission
-                          </Button>
-                        </div>
-                        <div className="border rounded-lg">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
+                {/* Mission Lines */}
+                {missionLines.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">
+                      Mission Lines ({missionLines.length})
+                    </h4>
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {columns.find((col) => col.key === "type")
+                              ?.visible && <TableHead>Type</TableHead>}
+                            {columns.find((col) => col.key === "description")
+                              ?.visible && <TableHead>Description</TableHead>}
+                            {columns.find((col) => col.key === "quantity")
+                              ?.visible && <TableHead>Qty</TableHead>}
+                            {columns.find((col) => col.key === "unitPrice")
+                              ?.visible && <TableHead>Unit Price</TableHead>}
+                            {columns.find((col) => col.key === "personnel")
+                              ?.visible && <TableHead>Personnel</TableHead>}
+                            {columns.find((col) => col.key === "discount")
+                              ?.visible && <TableHead>Discount %</TableHead>}
+                            {columns.find((col) => col.key === "tax")
+                              ?.visible && <TableHead>Tax %</TableHead>}
+                            {columns.find((col) => col.key === "total")
+                              ?.visible && <TableHead>Total</TableHead>}
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {missionLines.map((line, index) => {
+                            const globalIndex = lines.findIndex(
+                              (l) => l.id === line.id
+                            );
+                            return (
+                              <TableRow key={line.id}>
                                 {columns.find((col) => col.key === "type")
-                                  ?.visible && <TableHead>Type</TableHead>}
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Badge variant="default">
+                                      {line.lineType}
+                                    </Badge>
+                                  </TableCell>
+                                )}
                                 {columns.find(
                                   (col) => col.key === "description"
                                 )?.visible && (
-                                  <TableHead>Description</TableHead>
+                                  <TableCell>
+                                    <Input
+                                      value={line.description}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          description: e.target.value,
+                                        })
+                                      }
+                                      className="border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
                                 )}
                                 {columns.find((col) => col.key === "quantity")
-                                  ?.visible && <TableHead>Qty</TableHead>}
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.quantity}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          quantity:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
                                 {columns.find((col) => col.key === "unitPrice")
                                   ?.visible && (
-                                  <TableHead>Unit Price</TableHead>
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.unitPriceBase}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          unitPriceBase:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-24 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
                                 )}
                                 {columns.find((col) => col.key === "personnel")
-                                  ?.visible && <TableHead>Personnel</TableHead>}
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.personnelCount}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          personnelCount:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
                                 {columns.find((col) => col.key === "discount")
                                   ?.visible && (
-                                  <TableHead>Discount %</TableHead>
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      value={line.discountPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          discountPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
                                 )}
                                 {columns.find((col) => col.key === "tax")
-                                  ?.visible && <TableHead>Tax %</TableHead>}
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.taxPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          taxPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
+                                )}
                                 {columns.find((col) => col.key === "total")
-                                  ?.visible && <TableHead>Total</TableHead>}
+                                  ?.visible && (
+                                  <TableCell className="font-medium">
+                                    ${line.totalAfterDiscountBase.toFixed(2)}
+                                  </TableCell>
+                                )}
+                                <TableCell>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeLine(globalIndex)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
                               </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {missionLines.map((line, index) => {
-                                const globalIndex = lines.findIndex(
-                                  (l) => l.id === line.id
-                                );
-                                return (
-                                  <TableRow key={line.id}>
-                                    {columns.find((col) => col.key === "type")
-                                      ?.visible && (
-                                      <TableCell>
-                                        <Badge
-                                          variant={
-                                            line.lineType === "MISSION"
-                                              ? "default"
-                                              : "secondary"
-                                          }
-                                        >
-                                          {line.lineType}
-                                        </Badge>
-                                      </TableCell>
-                                    )}
-                                    {columns.find(
-                                      (col) => col.key === "description"
-                                    )?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          value={line.description}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              description: e.target.value,
-                                            })
-                                          }
-                                          className="border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find(
-                                      (col) => col.key === "quantity"
-                                    )?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          value={line.quantity}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              quantity:
-                                                parseInt(e.target.value) || 1,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find(
-                                      (col) => col.key === "unitPrice"
-                                    )?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={line.unitPriceBase}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              unitPriceBase:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-24 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find(
-                                      (col) => col.key === "personnel"
-                                    )?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          value={line.personnelCount}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              personnelCount:
-                                                parseInt(e.target.value) || 1,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                          required
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find(
-                                      (col) => col.key === "discount"
-                                    )?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          max="100"
-                                          value={line.discountPercent || ""}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              discountPercent:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find((col) => col.key === "tax")
-                                      ?.visible && (
-                                      <TableCell>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={line.taxPercent || ""}
-                                          onChange={(e) =>
-                                            updateLine(globalIndex, {
-                                              taxPercent:
-                                                parseFloat(e.target.value) || 0,
-                                            })
-                                          }
-                                          className="w-20 border-0 focus-visible:ring-1"
-                                        />
-                                      </TableCell>
-                                    )}
-                                    {columns.find((col) => col.key === "total")
-                                      ?.visible && (
-                                      <TableCell className="font-medium">
-                                        ${line.totalAfterDiscountBase}
-                                      </TableCell>
-                                    )}
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    );
-                  }
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Service Lines */}
+                {serviceLines.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">
+                      Service Lines ({serviceLines.length})
+                    </h4>
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {columns.find((col) => col.key === "type")
+                              ?.visible && <TableHead>Type</TableHead>}
+                            {columns.find((col) => col.key === "description")
+                              ?.visible && <TableHead>Description</TableHead>}
+                            {columns.find((col) => col.key === "quantity")
+                              ?.visible && <TableHead>Qty</TableHead>}
+                            {columns.find((col) => col.key === "unitPrice")
+                              ?.visible && <TableHead>Unit Price</TableHead>}
+                            {columns.find((col) => col.key === "personnel")
+                              ?.visible && <TableHead>Personnel</TableHead>}
+                            {columns.find((col) => col.key === "discount")
+                              ?.visible && <TableHead>Discount %</TableHead>}
+                            {columns.find((col) => col.key === "tax")
+                              ?.visible && <TableHead>Tax %</TableHead>}
+                            {columns.find((col) => col.key === "total")
+                              ?.visible && <TableHead>Total</TableHead>}
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {serviceLines.map((line, index) => {
+                            const globalIndex = lines.findIndex(
+                              (l) => l.id === line.id
+                            );
+                            return (
+                              <TableRow key={line.id}>
+                                {columns.find((col) => col.key === "type")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {line.lineType}
+                                    </Badge>
+                                  </TableCell>
+                                )}
+                                {columns.find(
+                                  (col) => col.key === "description"
+                                )?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      value={line.description}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          description: e.target.value,
+                                        })
+                                      }
+                                      className="border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "quantity")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.quantity}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          quantity:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "unitPrice")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.unitPriceBase}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          unitPriceBase:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-24 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "personnel")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.personnelCount}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          personnelCount:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "discount")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      value={line.discountPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          discountPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "tax")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.taxPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          taxPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "total")
+                                  ?.visible && (
+                                  <TableCell className="font-medium">
+                                    ${line.totalAfterDiscountBase}
+                                  </TableCell>
+                                )}
+                                <TableCell>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeLine(globalIndex)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom Lines */}
+                {customLines.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">
+                      Custom Lines ({customLines.length})
+                    </h4>
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {columns.find((col) => col.key === "type")
+                              ?.visible && <TableHead>Type</TableHead>}
+                            {columns.find((col) => col.key === "description")
+                              ?.visible && <TableHead>Description</TableHead>}
+                            {columns.find((col) => col.key === "quantity")
+                              ?.visible && <TableHead>Qty</TableHead>}
+                            {columns.find((col) => col.key === "unitPrice")
+                              ?.visible && <TableHead>Unit Price</TableHead>}
+                            {columns.find((col) => col.key === "personnel")
+                              ?.visible && <TableHead>Personnel</TableHead>}
+                            {columns.find((col) => col.key === "discount")
+                              ?.visible && <TableHead>Discount %</TableHead>}
+                            {columns.find((col) => col.key === "tax")
+                              ?.visible && <TableHead>Tax %</TableHead>}
+                            {columns.find((col) => col.key === "total")
+                              ?.visible && <TableHead>Total</TableHead>}
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {customLines.map((line, index) => {
+                            const globalIndex = lines.findIndex(
+                              (l) => l.id === line.id
+                            );
+                            return (
+                              <TableRow key={line.id}>
+                                {columns.find((col) => col.key === "type")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Badge variant="outline">
+                                      {line.lineType}
+                                    </Badge>
+                                  </TableCell>
+                                )}
+                                {columns.find(
+                                  (col) => col.key === "description"
+                                )?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      value={line.description}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          description: e.target.value,
+                                        })
+                                      }
+                                      className="border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "quantity")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.quantity}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          quantity:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "unitPrice")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.unitPriceBase}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          unitPriceBase:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-24 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "personnel")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={line.personnelCount}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          personnelCount:
+                                            parseInt(e.target.value) || 1,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                      required
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "discount")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      value={line.discountPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          discountPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "tax")
+                                  ?.visible && (
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={line.taxPercent || ""}
+                                      onChange={(e) =>
+                                        updateLine(globalIndex, {
+                                          taxPercent:
+                                            parseFloat(e.target.value) || 0,
+                                        })
+                                      }
+                                      className="w-20 border-0 focus-visible:ring-1"
+                                    />
+                                  </TableCell>
+                                )}
+                                {columns.find((col) => col.key === "total")
+                                  ?.visible && (
+                                  <TableCell className="font-medium">
+                                    ${line.totalAfterDiscountBase.toFixed(2)}
+                                  </TableCell>
+                                )}
+                                <TableCell>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeLine(globalIndex)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
