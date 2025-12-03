@@ -1,52 +1,59 @@
-// src/attendance/attendance.service.ts
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { AttendanceStatus } from '@prisma/client';
-import { min, max } from 'date-fns';
+import { parseISO, endOfDay, startOfDay, format } from 'date-fns';
+
+type GridRow = {
+  clientName: string;
+  siteName: string;
+  serviceName: string;
+  post: string;
+  type: string;
+  personnelName?: string;
+  identification?: string;
+  assignmentId?: number;
+  contractSiteServiceId?: number;
+  postIndex?: number;
+  [date: string]: { status: AttendanceStatus; editable: boolean } | string | number | undefined;
+};
 
 @Injectable()
 export class AttendanceService {
   constructor(private prisma: PrismaService) {}
 
-  async getGridData(companyId: number, startDate: Date, endDate: Date) {
-    const contracts = await this.prisma.clientContract.findMany({
+  async getGridData(companyId: number, startDateStr: string, endDateStr: string) {
+    const startDate = parseISO(startDateStr);
+    const endDate = endOfDay(parseISO(endDateStr));
+
+    // Fetch all attendances in range for confirmed contracts
+    const attendances = await this.prisma.attendance.findMany({
       where: {
-        companyId,
-        status: 'CONFIRMED',
-        OR: [
-          { startDate: { lte: endDate } },
-          { endDate: { gte: startDate } },
-        ],
+        assignment: {  // Now lowercase, matching fixed schema
+          contractSiteService: {
+            contractSite: {
+              clientContract: {
+                companyId,
+                status: 'CONFIRMED',
+              },
+            },
+          },
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
+        },
+        date: { gte: startDate, lte: endDate },
       },
       include: {
-        client: { select: { name: true } },
-        sites: {
+        assignment: {  // Lowercase accessor
           include: {
-            site: { select: { name: true } },
-            services: {
+            personnel: { select: { firstName: true, lastName: true, identifier: true } },
+            contractSiteService: {
               include: {
                 service: { select: { name: true } },
-                assignments: {
-                  where: {
-                    isReplacement: false,
-                    OR: [
-                      { startDate: { lte: endDate } },
-                      { endDate: { gte: startDate } },
-                    ],
-                  },
+                contractSite: {
                   include: {
-                    personnel: { select: { firstName: true, lastName: true, identifier: true } },
-                    attendances: {
-                      where: { date: { gte: startDate, lte: endDate } },
-                    },
-                    replacements: {
-                      include: {
-                        personnel: { select: { firstName: true, lastName: true, identifier: true } },
-                        attendances: {
-                          where: { date: { gte: startDate, lte: endDate } },
-                        },
-                        replacements: true,
-                      },
+                    site: { select: { name: true } },
+                    clientContract: {
+                      include: { client: { select: { name: true } } },
                     },
                   },
                 },
@@ -57,79 +64,43 @@ export class AttendanceService {
       },
     });
 
-    // Flatten to rows with explicit fields for client, site, service, post, type (Main/Replacement), personnel
-    const flatRows: any[] = [];
-    for (const contract of contracts) {
-      const clientName = contract.client.name;
+    // Group by assignment to build rows
+    const rowsByAssignment: Record<number, GridRow> = attendances.reduce((acc, att) => {
+      const assignment = att.assignment;  // Lowercase
+      const assignmentId = assignment.id;
+      if (!acc[assignmentId]) {
+        const clientName = assignment.contractSiteService.contractSite.clientContract.client.name;
+        const siteName = assignment.contractSiteService.contractSite.site.name || 'Unnamed Site';
+        const serviceName = assignment.contractSiteService.service.name;
+        const postIndex = assignment.postIndex;
+        const type = assignment.isReplacement ? 'Replacement' : (assignment.personnelId ? 'Main' : 'Unassigned');
+        const personnelName = assignment.personnel ? `${assignment.personnel.firstName || ''} ${assignment.personnel.lastName || ''}` : '';
+        const identification = assignment.personnel?.identifier || '';
 
-      for (const cSite of contract.sites) {
-        const siteName = cSite.site?.name || 'Unnamed Site';
-        const siteStart = new Date(cSite.startDate);
-        const siteEnd = new Date(cSite.endDate);
-
-        for (const cService of cSite.services) {
-          const serviceName = cService.service.name;
-
-          for (let postIndex = 1; postIndex <= cService.requiredCount; postIndex++) {
-            const assignment = cService.assignments.find((a) => a.postIndex === postIndex);
-
-            if (assignment) {
-              // Main assignment row
-              flatRows.push(
-                this.buildFlatRow(
-                  clientName,
-                  siteName,
-                  serviceName,
-                  postIndex,
-                  'Main',
-                  assignment,
-                  startDate,
-                  endDate,
-                  siteStart,
-                  siteEnd,
-                  cService.id,
-                ),
-              );
-
-              // Add replacements recursively
-              this.addFlatReplacementRows(
-                assignment.replacements || [],
-                clientName,
-                siteName,
-                serviceName,
-                postIndex,
-                startDate,
-                endDate,
-                siteStart,
-                siteEnd,
-                1,
-                flatRows,
-                cService.id,
-              );
-            } else {
-              // Unassigned post
-              flatRows.push(
-                this.buildFlatRow(
-                  clientName,
-                  siteName,
-                  serviceName,
-                  postIndex,
-                  'Unassigned',
-                  undefined,
-                  startDate,
-                  endDate,
-                  siteStart,
-                  siteEnd,
-                  cService.id,
-                ),
-              );
-            }
-          }
-        }
+        acc[assignmentId] = {
+          clientName,
+          siteName,
+          serviceName,
+          post: `Post ${postIndex}`,
+          type,
+          personnelName,
+          identification,
+          assignmentId,
+          contractSiteServiceId: assignment.contractSiteServiceId,
+          postIndex,
+          isLeaf: true,
+        };
       }
-    }
 
-    // Sort the flatRows for proper row spanning: by client, site, service, post, type
+      const dateStr = format(att.date, 'yyyy-MM-dd');
+      acc[assignmentId][dateStr] = { status: att.status, editable: true };
+
+      return acc;
+    }, {});
+
+    const flatRows: GridRow[] = Object.values(rowsByAssignment);
+
+    // Sort rows
     flatRows.sort((a, b) => {
       if (a.clientName !== b.clientName) return a.clientName.localeCompare(b.clientName);
       if (a.siteName !== b.siteName) return a.siteName.localeCompare(b.siteName);
@@ -139,110 +110,6 @@ export class AttendanceService {
     });
 
     return flatRows;
-  }
-
-  private buildFlatRow(
-    clientName: string,
-    siteName: string,
-    serviceName: string,
-    postIndex: number,
-    type: string,
-    assignment: any | undefined,
-    startDate: Date,
-    endDate: Date,
-    siteStart: Date,
-    siteEnd: Date,
-    contractSiteServiceId: number,
-  ) {
-    const row: any = {
-      clientName,
-      siteName,
-      serviceName,
-      post: `Post ${postIndex}`,
-      type,
-      personnelName: assignment?.personnel ? `${assignment.personnel.firstName || ''} ${assignment.personnel.lastName || ''}` : '',
-      identification: assignment?.personnel?.identifier || '',
-      assignmentId: assignment?.id,
-      contractSiteServiceId,
-      postIndex,
-      isLeaf: true,
-    };
-
-    const rowStart = assignment ? new Date(assignment.startDate) : siteStart;
-    const rowEnd = assignment ? new Date(assignment.endDate) : siteEnd;
-
-    let current = new Date(startDate);
-    while (current <= endDate) {
-      const dateStr = current.toISOString().split('T')[0];
-      if (current >= rowStart && current <= rowEnd) {
-        const att = assignment?.attendances.find(
-          (a: any) => a.date.toISOString().split('T')[0] === dateStr,
-        );
-        row[dateStr] = {
-          status: att?.status || AttendanceStatus.PRESENT,
-          editable: true,
-        };
-      } else {
-        row[dateStr] = {
-          status: null,
-          editable: false,
-        };
-      }
-      current = new Date(current.setDate(current.getDate() + 1));
-    }
-
-    return row;
-  }
-
-  private addFlatReplacementRows(
-    replacements: any[],
-    clientName: string,
-    siteName: string,
-    serviceName: string,
-    postIndex: number,
-    startDate: Date,
-    endDate: Date,
-    siteStart: Date,
-    siteEnd: Date,
-    repNumber: number,
-    flatRows: any[],
-    contractSiteServiceId: number,
-  ) {
-    for (const rep of replacements) {
-      flatRows.push(
-        this.buildFlatRow(
-          clientName,
-          siteName,
-          serviceName,
-          postIndex,
-          `Replacement ${repNumber}`,
-          rep,
-          startDate,
-          endDate,
-          siteStart,
-          siteEnd,
-          contractSiteServiceId,
-        ),
-      );
-
-      if (rep.replacements?.length > 0) {
-        this.addFlatReplacementRows(
-          rep.replacements,
-          clientName,
-          siteName,
-          serviceName,
-          postIndex,
-          startDate,
-          endDate,
-          siteStart,
-          siteEnd,
-          repNumber + 1,
-          flatRows,
-          contractSiteServiceId,
-        );
-      }
-      repNumber++;
-    }
   }
 
   async updateAttendance(
@@ -259,7 +126,10 @@ export class AttendanceService {
       isAddingReplacement?: boolean;
     },
   ) {
-    const dateObj = data.date ? new Date(data.date) : new Date();
+    if (!data.date && (data.status || data.isAddingReplacement)) {
+      throw new BadRequestException('Date is required for status updates or replacements');
+    }
+    const dateObj = data.date ? startOfDay(parseISO(data.date)) : startOfDay(new Date());
     return this.prisma.$transaction(async (tx) => {
       let assignment;
       let originalAssignment;
@@ -269,7 +139,7 @@ export class AttendanceService {
           throw new BadRequestException('Missing data for replacement');
         }
 
-        // Check for conflicts: replacement personnel not assigned elsewhere on this date
+        // Conflict check for replacement personnel
         const conflicting = await tx.assignment.findFirst({
           where: {
             personnelId: data.personnelId,
@@ -281,7 +151,7 @@ export class AttendanceService {
           throw new BadRequestException(`Personnel ${data.personnelId} is already assigned on ${data.date}`);
         }
 
-        // First, update the original assignment's attendance to the new status (e.g., ABSENT)
+        // Update original attendance status (e.g., to ABSENT)
         originalAssignment = await tx.assignment.findUnique({
           where: { id: data.replacementForId },
         });
@@ -295,7 +165,7 @@ export class AttendanceService {
           create: { assignmentId: originalAssignment.id, date: dateObj, status: data.status },
         });
 
-        // Check for existing replacement with same personnel for this original
+        // Handle existing or new replacement assignment
         const existingReplacement = await tx.assignment.findFirst({
           where: {
             replacementForId: data.replacementForId,
@@ -347,6 +217,7 @@ export class AttendanceService {
           });
         }
       } else {
+        // Non-replacement update (personnel assign or status change)
         if (data.assignmentId) {
           assignment = await tx.assignment.findUnique({
             where: { id: data.assignmentId },
@@ -354,8 +225,8 @@ export class AttendanceService {
         } else {
           assignment = await tx.assignment.findFirst({
             where: {
-              contractSiteServiceId: data.contractSiteServiceId,
-              postIndex: data.postIndex,
+              contractSiteServiceId: data.contractSiteServiceId!,
+              postIndex: data.postIndex!,
               isReplacement: false,
               startDate: { lte: dateObj },
               endDate: { gte: dateObj },
@@ -367,7 +238,7 @@ export class AttendanceService {
           if (!data.contractSiteServiceId || !data.postIndex) {
             throw new BadRequestException('Missing contractSiteServiceId or postIndex for new assignment');
           }
-          // Check for conflicts on the date (since new assignment is for single date)
+          // Conflict check for new single-day assignment
           const conflicting = await tx.assignment.findFirst({
             where: {
               personnelId: data.personnelId,
@@ -382,7 +253,7 @@ export class AttendanceService {
           assignment = await tx.assignment.create({
             data: {
               contractSiteServiceId: data.contractSiteServiceId,
-              postIndex: data.postIndex,
+              postIndex: data.postIndex!,
               personnelId: data.personnelId,
               startDate: dateObj,
               endDate: dateObj,
@@ -392,8 +263,8 @@ export class AttendanceService {
         }
         if (!assignment) throw new BadRequestException('Assignment not found');
 
+        // Update personnel if provided (with overlap check)
         if (data.personnelId) {
-          // Check for overlapping conflicts across the assignment period
           const overlapping = await tx.assignment.findFirst({
             where: {
               personnelId: data.personnelId,
@@ -412,6 +283,7 @@ export class AttendanceService {
           });
         }
 
+        // Update status if provided
         if (data.status && data.date) {
           await tx.attendance.upsert({
             where: {
@@ -456,12 +328,12 @@ export class AttendanceService {
   }
 
   private async deleteAssignmentRecursive(tx: any, id: number) {
-    // Delete attendances
+    // Delete attendances first
     await tx.attendance.deleteMany({
       where: { assignmentId: id },
     });
 
-    // Recursively delete replacements
+    // Recurse on replacements
     const replacements = await tx.assignment.findMany({
       where: { replacementForId: id },
     });
@@ -469,7 +341,7 @@ export class AttendanceService {
       await this.deleteAssignmentRecursive(tx, rep.id);
     }
 
-    // Delete the assignment
+    // Delete assignment
     await tx.assignment.delete({
       where: { id },
     });

@@ -44,7 +44,6 @@
     "class-validator": "^0.14.2",
     "country-state-city": "^3.2.1",
     "date-fns": "^4.1.0",
-    "dayjs": "^1.11.18",
     "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

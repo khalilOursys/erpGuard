@@ -12,7 +12,7 @@ datasource db {
 }
 
 /// *
-///  * Core models
+/// * Core models
 model Company {
   id               Int              @id @default(autoincrement())
   name             String           @unique
@@ -53,7 +53,7 @@ model CompanyContact {
 }
 
 /// *
-///  * Clients (the customers of the company)
+/// * Clients (the customers of the company)
 model Client {
   id         Int              @id @default(autoincrement())
   name       String
@@ -128,7 +128,7 @@ model ClientContact {
 }
 
 /// *
-///  * Services (e.g., Guard Service, Cooking Service, Cleaning Service)
+/// * Services (e.g., Guard Service, Cooking Service, Cleaning Service)
 model Service {
   id                        Int                         @id @default(autoincrement())
   companyId                 Int
@@ -150,10 +150,11 @@ model Service {
 
   @@index([companyId])
   @@index([name])
+  clientContractServices ClientContractService[]
 }
 
 /// *
-///  * Personnel — generic workers assigned to services
+/// * Personnel — generic workers assigned to services
 model Personnel {
   id             Int                 @id @default(autoincrement())
   companyId      Int
@@ -188,7 +189,7 @@ model Personnel {
 }
 
 /// *
-///  * Personnel contracts
+/// * Personnel contracts
 model PersonnelContract {
   id             Int       @id @default(autoincrement())
   contractNumber String    @unique
@@ -209,7 +210,7 @@ model PersonnelContract {
 }
 
 /// *
-///  * Client contracts and extensions (what the client signs with the company)
+/// * Client contracts and extensions (what the client signs with the company)
 model ClientContract {
   id             Int                  @id @default(autoincrement())
   contractNumber String               @unique
@@ -239,10 +240,11 @@ model ClientContract {
   @@index([clientId])
   @@index([startDate, endDate])
   @@index([companyId])
+  clientContractServices ClientContractService[]
 }
 
 /// *
-///  * Each contract can cover multiple client sites (sites); for each site we can set start/end and the planned services/quantities
+/// * Each contract can cover multiple client sites (sites); for each site we can set start/end and the planned services/quantities
 model ClientContractSite {
   id               Int                         @id @default(autoincrement())
   clientContractId Int
@@ -262,7 +264,7 @@ model ClientContractSite {
 }
 
 /// *
-///  * For each contract-site, how many of each service are required (and optional per-site override rates)
+/// * For each contract-site, how many of each service are required (and optional per-site override rates)
 model ClientContractSiteService {
   id             Int                @id @default(autoincrement())
   contractSiteId Int
@@ -302,7 +304,7 @@ model Assignment {
 }
 
 /// *
-///  * Contract extensions
+/// * Contract extensions
 model ContractExtension {
   id               Int            @id @default(autoincrement())
   clientContractId Int
@@ -317,7 +319,7 @@ model ContractExtension {
 }
 
 /// *
-///  * Attendance per assignment per day (or shift)
+/// * Attendance per assignment per day (or shift)
 model Attendance {
   id           Int              @id @default(autoincrement())
   assignmentId Int
@@ -326,16 +328,21 @@ model Attendance {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   notes        String?
-  Assignment   Assignment[]     @relation("AssignmentToAttendance")
-  Personnel    Personnel[]      @relation("AttendanceToPersonnel")
-  User         User[]           @relation("AttendanceToUser")
+
+  // FIXED: Many-to-one relation (Attendance belongs to one Assignment)
+  assignment   Assignment       @relation("AssignmentToAttendance", fields: [assignmentId], references: [id])
+
+  // Optional: If you need back-relations to Personnel/User, keep/add them as one-to-many if intended
+  // (But from schema, they seem inverted too—fix if needed; for now, assuming they're for notes/audit)
 
   @@unique([assignmentId, date])
   @@index([assignmentId])
   @@index([date])
+  users User[] @relation("AttendanceToUser")
+  personnels Personnel[] @relation("AttendanceToPersonnel")
 }
 
-///  * Users (system users)
+/// * Users (system users)
 model User {
   id                      Int              @id @default(autoincrement())
   companyId               Int
@@ -366,8 +373,24 @@ model User {
   @@index([role])
 }
 
+model ClientContractService {
+  id                 Int      @id @default(autoincrement())
+  clientContractId   Int
+  serviceId          Int
+  basePay            Decimal  @db.Decimal(16, 2)
+  extraPay           Decimal  @db.Decimal(16, 2)
+  clientPrice        Decimal  @db.Decimal(18, 2)
+  createdAt          DateTime @default(now())
+
+  clientContract     ClientContract @relation(fields: [clientContractId], references: [id])
+  service            Service        @relation(fields: [serviceId], references: [id])
+
+  @@index([clientContractId])
+  @@index([serviceId])
+}
+
 /// *
-///  * Permissions
+/// * Permissions
 model Permission {
   id           Int              @id @default(autoincrement())
   name         String           @unique
@@ -406,7 +429,7 @@ model UserPermission {
 }
 
 /// *
-///  * Notifications
+/// * Notifications
 model Notification {
   id        Int                 @id @default(autoincrement())
   userId    Int
@@ -424,7 +447,7 @@ model Notification {
 }
 
 /// *
-///  * Audit logs
+/// * Audit logs
 model AuditLog {
   id           Int      @id @default(autoincrement())
   userId       Int
@@ -441,7 +464,7 @@ model AuditLog {
 }
 
 /// *
-///  * Payments / payroll records (per personnel per period/assignment)
+/// * Payments / payroll records (per personnel per period/assignment)
 model PaymentRecord {
   id            Int           @id @default(autoincrement())
   personnelId   Int
@@ -467,7 +490,7 @@ model PaymentRecord {
 }
 
 /// *
-///  * File metadata
+/// * File metadata
 model File {
   id                 Int                 @id @default(autoincrement())
   filename           String
@@ -490,7 +513,7 @@ model File {
 }
 
 /// *
-///  * Column configuration for billing/invoice display
+/// * Column configuration for billing/invoice display
 model ColumnConfig {
   id        Int      @id @default(autoincrement())
   billingId Int
@@ -507,7 +530,7 @@ model ColumnConfig {
 }
 
 /// *
-///  * ---- Billing / Invoice system ----
+/// * ---- Billing / Invoice system ----
 model Billing {
   id                   Int             @id @default(autoincrement())
   invoiceNumber        String?
@@ -600,7 +623,7 @@ model Payment {
 }
 
 /// *
-///  * Enums
+/// * Enums
 enum ClientType {
   FACTORY
   BANK
@@ -670,7 +693,7 @@ enum RateSource {
 }
 
 /// *
-///  * Contract lifecycle states for review/confirmation
+/// * Contract lifecycle states for review/confirmation
 enum ContractStatus {
   DRAFT
   SUBMITTED_FOR_REVIEW

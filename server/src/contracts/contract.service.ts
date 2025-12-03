@@ -9,6 +9,8 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { join, extname } from 'path';
 import * as fs from 'fs/promises';
+import { AttendanceStatus } from '@prisma/client';
+import { parseISO, startOfDay, endOfDay, addDays, differenceInDays } from 'date-fns';
 
 @Injectable()
 export class ContractService {
@@ -24,7 +26,7 @@ export class ContractService {
     return `CON-${companyId}-${Date.now()}`;
   }
 
-  async create(
+async create(
     companyId: number,
     dto: CreateContractDto,
     actorUserId?: number,
@@ -36,8 +38,8 @@ export class ContractService {
     }
 
     // Validate contract dates
-    const contractStart = new Date(dto.startDate);
-    const contractEnd = new Date(dto.endDate);
+    const contractStart = parseISO(dto.startDate);
+    const contractEnd = parseISO(dto.endDate);
     if (isNaN(contractStart.getTime()) || isNaN(contractEnd.getTime())) {
       throw new BadRequestException('Invalid contract start or end date');
     }
@@ -49,8 +51,8 @@ export class ContractService {
 
     // Validate site dates
     for (const site of dto.sites) {
-      const siteStart = new Date(site.startDate);
-      const siteEnd = new Date(site.endDate);
+      const siteStart = parseISO(site.startDate);
+      const siteEnd = parseISO(site.endDate);
       if (isNaN(siteStart.getTime()) || isNaN(siteEnd.getTime())) {
         throw new BadRequestException(`Invalid dates for site ${site.siteId}`);
       }
@@ -118,8 +120,8 @@ export class ContractService {
         data: {
           contractNumber,
           clientId: dto.clientId,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
+          startDate: contractStart,
+          endDate: contractEnd,
           companyId,
           status: 'DRAFT',
         },
@@ -135,6 +137,9 @@ export class ContractService {
           clientPrice: r.clientPrice ?? 0,
           createdAt: new Date(),
         }));
+        await tx.clientContractService.createMany({
+          data: createRates,
+        });
       }
 
       // Create per-site contract entries and per-site services
@@ -144,94 +149,33 @@ export class ContractService {
             data: {
               clientContractId: contract.id,
               siteId: s.siteId,
-              startDate: new Date(s.startDate),
-              endDate: new Date(s.endDate),
+              startDate: parseISO(s.startDate),
+              endDate: parseISO(s.endDate),
             },
           });
 
           if (s.services && s.services.length > 0) {
-            const siteServices = s.services.map((ss) => ({
+            const createServices = s.services.map((ss) => ({
               contractSiteId: createdSite.id,
               serviceId: ss.serviceId,
               requiredCount: ss.requiredCount ?? 1,
-              basePay: ss.basePay ?? 0,
-              extraPay: ss.extraPay ?? 0,
-              clientPrice: ss.clientPrice ?? 0,
-              createdAt: new Date(),
+              basePay: ss.basePay,
+              extraPay: ss.extraPay,
+              clientPrice: ss.clientPrice,
             }));
             await tx.clientContractSiteService.createMany({
-              data: siteServices,
-              skipDuplicates: true,
+              data: createServices,
             });
           }
         }
       }
 
-      // Return created contract with relations
-      return tx.clientContract.findUnique({
-        where: { id: contract.id },
-        include: {
-          sites: {
-            include: {
-              services: true,
-            },
-          },
-          client: true,
-          file: true,
-        },
-      });
+      return contract;
     });
 
+    // Handle file upload if provided
     if (file) {
-      const tempFilePath = file.path;
-      try {
-        await fs.access(tempFilePath);
-        console.log('Create: File access successful');
-      } catch (error) {
-        console.error('Create: File access failed:', error);
-        throw new BadRequestException(
-          `Uploaded file not found on server: ${error.message}`,
-        );
-      }
-
-      const ext = extname(file.originalname);
-      const newFilename = `${contract.id}${ext}`;
-      const newFilePath = join(this.uploadDir, newFilename);
-
-      try {
-        await fs.rename(tempFilePath, newFilePath);
-        console.log(`Create: Renamed file to ${newFilePath}`);
-        const fileRecord = await this.prisma.file.create({
-          data: {
-            filename: file.originalname,
-            url: `/uploads/contracts/${newFilename}`,
-            mimeType: file.mimetype,
-            size: file.size,
-            uploadedById: actorUserId || null,
-          },
-        });
-        await this.prisma.clientContract.update({
-          where: { id: contract.id },
-          data: { fileId: fileRecord.id },
-        });
-        contract = await this.prisma.clientContract.findUnique({
-          where: { id: contract.id },
-          include: {
-            sites: {
-              include: {
-                services: true,
-              },
-            },
-            client: true,
-            file: true,
-          },
-        });
-      } catch (error) {
-        console.error('Create: File rename failed:', error);
-        throw new BadRequestException(
-          `Failed to process uploaded file: ${error.message}`,
-        );
-      }
+      contract = await this.attachFile(companyId, contract.id, file, actorUserId);
     }
 
     return contract;
@@ -670,60 +614,80 @@ export class ContractService {
     });
   }
 
-  async confirm(companyId: number, id: number, confirmerUserId: number) {
+async confirm(companyId: number, id: number, confirmerUserId: number) {
     const contract = await this.prisma.clientContract.findUnique({
       where: { id },
       include: {
         sites: {
-          include: { services: true, site: true },
+          include: {
+            services: true,
+          },
         },
-        client: true,
       },
     });
-
     if (!contract || contract.companyId !== companyId)
       throw new NotFoundException('Contract not found');
     if (contract.status !== 'SUBMITTED_FOR_REVIEW') {
-      throw new BadRequestException(
-        'Only submitted contracts can be confirmed',
-      );
+      throw new BadRequestException('Only submitted contracts can be confirmed');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Update contract status
-      await tx.clientContract.update({
-        where: { id },
-        data: {
-          status: 'CONFIRMED',
-          confirmedById: confirmerUserId,
-          confirmedAt: new Date(),
-        },
-      });
+    // Update status
+    const updated = await this.prisma.clientContract.update({
+      where: { id },
+      data: {
+        status: 'CONFIRMED',
+        confirmedById: confirmerUserId,
+        confirmedAt: new Date(),
+      },
+    });
 
-      const missionsCreated: any[] = [];
-
-      // For each contract site, create one mission
+    // Create assignments and initial attendances
+    const assignmentsCreated: any[] = [];
+    await this.prisma.$transaction(async (tx) => {
       for (const cSite of contract.sites) {
-        // compute requiredPersonnel as sum of requiredCount
-        const requiredPersonnel = (cSite.services || []).reduce(
-          (acc, s) => acc + (s.requiredCount || 0),
-          0,
-        );
+        for (const cService of cSite.services) {
+          for (let postIndex = 1; postIndex <= cService.requiredCount; postIndex++) {
+            const assignment = await tx.assignment.create({
+              data: {
+                contractSiteServiceId: cService.id,
+                postIndex,
+                startDate: cSite.startDate,
+                endDate: cSite.endDate,
+                createdById: confirmerUserId,
+              },
+            });
+            assignmentsCreated.push(assignment);
 
-        // choose manager: submittedById if exists, else confirmer
-        const managerId = contract.submittedById ?? confirmerUserId;
-
+            // Bulk create initial attendances for all days
+            const daysCount = differenceInDays(cSite.endDate, cSite.startDate) + 1;
+            const attendancesData = [];
+            let currentDate = startOfDay(cSite.startDate);
+            for (let i = 0; i < daysCount; i++) {
+              attendancesData.push({
+                assignmentId: assignment.id,
+                date: currentDate,
+                status: AttendanceStatus.PRESENT,
+              });
+              currentDate = addDays(currentDate, 1);
+            }
+            await tx.attendance.createMany({
+              data: attendancesData,
+            });
+          }
+        }
       }
 
       return {
-        message: 'Contract confirmed',
-        missionsCount: missionsCreated.length,
-        missions: missionsCreated,
+        message: 'Contract confirmed, assignments and initial attendances created',
+        assignmentsCount: assignmentsCreated.length,
+        assignments: assignmentsCreated,
       };
     });
+
+    return updated;
   }
 
-  async reject(
+async reject(
     companyId: number,
     id: number,
     confirmerUserId: number,
@@ -757,7 +721,6 @@ export class ContractService {
           entity: 'ClientContract',
           entityId: id,
           timestamp: new Date(),
-          // omit previousData because Prisma JSON input types may not accept `null`
           newData: { reason },
         },
       });
@@ -766,7 +729,7 @@ export class ContractService {
     return updated;
   }
 
-  async attachFile(
+async attachFile(
     companyId: number,
     contractId: number,
     file: Express.Multer.File,

@@ -18,12 +18,10 @@ export class AttendanceController {
     @Query('endDate') endDateStr: string,
   ) {
     const companyId = req.user.companyId;
-    const startDate = new Date(startDateStr);
-    const endDate = new Date(endDateStr);
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      throw new BadRequestException('Invalid dates');
+    if (!startDateStr || !endDateStr) {
+      throw new BadRequestException('startDate and endDate are required');
     }
-    return this.service.getGridData(companyId, startDate, endDate);
+    return this.service.getGridData(companyId, startDateStr, endDateStr);
   }
 
   @Permissions('attendance.manage')
