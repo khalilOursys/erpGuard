@@ -139,17 +139,40 @@ export class AttendanceService {
           throw new BadRequestException('Missing data for replacement');
         }
 
-        // Conflict check for replacement personnel
-        const conflicting = await tx.assignment.findFirst({
-          where: {
-            personnelId: data.personnelId,
-            startDate: { lte: dateObj },
-            endDate: { gte: dateObj },
+// === ENHANCED CONFLICT CHECK WITH DETAILED MESSAGE ===
+      const conflictingAssignment = await tx.assignment.findFirst({
+        where: {
+          personnelId: data.personnelId,
+          startDate: { lte: dateObj },
+          endDate: { gte: dateObj },
+        },
+        include: {
+          contractSiteService: {
+            include: {
+              service: { select: { name: true } },
+              contractSite: {
+                include: {
+                  site: { select: { name: true } },
+                  clientContract: {
+                    include: { client: { select: { name: true } } },
+                  },
+                },
+              },
+            },
           },
-        });
-        if (conflicting) {
-          throw new BadRequestException(`Personnel ${data.personnelId} is already assigned on ${data.date}`);
-        }
+        },
+      });
+
+      if (conflictingAssignment) {
+        const siteName = conflictingAssignment.contractSiteService.contractSite.site.name || 'Unknown Site';
+        const serviceName = conflictingAssignment.contractSiteService.service.name;
+        const post = `Post ${conflictingAssignment.postIndex}`;
+        const type = conflictingAssignment.isReplacement ? 'Replacement' : 'Main';
+
+        throw new BadRequestException(
+          `Personnel is already engaged as **${type}** in ${post} - ${serviceName} at ${siteName} on this date.`
+        );
+      }
 
         // Update original attendance status (e.g., to ABSENT)
         originalAssignment = await tx.assignment.findUnique({
@@ -239,16 +262,35 @@ export class AttendanceService {
             throw new BadRequestException('Missing contractSiteServiceId or postIndex for new assignment');
           }
           // Conflict check for new single-day assignment
-          const conflicting = await tx.assignment.findFirst({
-            where: {
-              personnelId: data.personnelId,
-              startDate: { lte: dateObj },
-              endDate: { gte: dateObj },
-            },
-          });
-          if (conflicting) {
-            throw new BadRequestException(`Personnel ${data.personnelId} is already assigned on ${data.date || 'the assignment period'}`);
-          }
+const conflicting = await tx.assignment.findFirst({
+  where: {
+    personnelId: data.personnelId,
+    startDate: { lte: dateObj },
+    endDate: { gte: dateObj },
+  },
+  include: {
+    contractSiteService: {
+      include: {
+        service: { select: { name: true } },
+        contractSite: {
+          include: {
+            site: { select: { name: true } },
+          },
+        },
+      },
+    },
+  },
+});
+if (conflicting) {
+  const postInfo = `Post ${conflicting.postIndex} (${conflicting.isReplacement ? 'Replacement' : 'Main'})`;
+  const siteInfo = conflicting.contractSiteService?.contractSite?.site?.name 
+    ? ` at ${conflicting.contractSiteService.contractSite.site.name}` 
+    : '';
+  
+  throw new BadRequestException(
+    `Personnel is already assigned on this date: ${postInfo}${siteInfo}`
+  );
+}
 
           assignment = await tx.assignment.create({
             data: {

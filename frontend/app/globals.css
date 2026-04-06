@@ -1,62 +1,90 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @import 'ag-grid-community/styles/ag-grid.css';
-@import 'ag-grid-community/styles/ag-theme-alpine.css'; /* Or ag-theme-quartz for Shadcn-like */
-:root {
-  /* Soft off-white instead of pure white */
-  --card: 30 10% 95%;
-  /* Matching the background for consistency */
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 30 10% 95%;
-  /* Matching the background for consistency */
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-  --radius: 0.5rem;
+@import 'ag-grid-community/styles/ag-theme-alpine.css';
+
+/* =========================
+   THEME VARIABLES
+========================= */
+@layer base {
+  :root {
+    /* 🌿 Softer light mode (no pure white) */
+    --background: 30 20% 96%;
+    --foreground: 222 20% 15%;
+
+    --card: 30 15% 94%;
+    --card-foreground: 222 20% 15%;
+
+    --popover: 30 15% 94%;
+    --popover-foreground: 222 20% 15%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 30 10% 92%;
+    --secondary-foreground: 222 20% 20%;
+
+    --muted: 30 10% 92%;
+    --muted-foreground: 215 10% 40%;
+
+    --accent: 30 10% 90%;
+    --accent-foreground: 222 20% 20%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 30 10% 85%;
+    --input: 30 10% 85%;
+    --ring: 222 20% 20%;
+
+    --radius: 0.5rem;
+  }
+
+  /* 🌙 Dark mode (unchanged, already good) */
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
-.dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
-}
-
-* {
-  @apply border-border;
-}
-
-body {
-  @apply bg-background text-foreground;
-}
-
+/* =========================
+   TABLE STYLING
+========================= */
 .table th {
   background-color: hsl(var(--muted));
   color: hsl(var(--muted-foreground));
@@ -82,6 +110,9 @@ body {
   border-bottom: none;
 }
 
+/* =========================
+   SCROLLBAR
+========================= */
 @layer utilities {
   .custom-scrollbar {
     scrollbar-width: thin;
@@ -108,92 +139,139 @@ body {
   background: hsl(var(--accent-foreground));
 }
 
+/* =========================
+   AG-GRID CUSTOMIZATION
+========================= */
 .ag-header-cell-label .ag-header-cell-text {
   writing-mode: vertical-rl;
-  transform: rotate(180deg); /* Adjust rotation as needed */
+  transform: rotate(180deg);
   white-space: nowrap;
   text-align: center;
 }
 
 .vertical-header {
-  width: 100px !important; /* Compact */
+  width: 100px !important;
   min-width: 50px !important;
 }
-
 
 .ag-row .span-row {
   text-align: center;
   font-weight: bold;
-  background-color: #f0f0f0;
+  background-color: hsl(var(--muted));
 }
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-}
-
+/* =========================
+   MISC
+========================= */
 .attendance table.MuiTable-root {
   width: 600px;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
+/* =========================
+   AG GRID — FULL THEME OVERRIDE (MATCH APP DESIGN)
+========================= */
 
-  body {
-    @apply bg-background text-foreground;
-  }
+/* Base (light mode) */
+.ag-theme-alpine {
+  --ag-background-color: hsl(var(--background));
+  --ag-foreground-color: hsl(var(--foreground));
+
+  --ag-header-background-color: hsl(var(--muted));
+  --ag-header-foreground-color: hsl(var(--muted-foreground));
+
+  --ag-row-hover-color: hsl(var(--accent));
+  --ag-odd-row-background-color: hsl(var(--background));
+
+  --ag-border-color: hsl(var(--border));
+  --ag-secondary-border-color: hsl(var(--border));
+
+  --ag-input-border-color: hsl(var(--input));
+
+  --ag-selected-row-background-color: hsl(var(--accent));
+  --ag-range-selection-background-color: hsl(var(--accent));
+
+  --ag-font-size: 14px;
+  --ag-font-family: inherit;
+
+  --ag-row-height: 44px;
+  --ag-header-height: 48px;
+}
+
+/* Dark mode (inherits your .dark class automatically) */
+.dark .ag-theme-alpine,
+.ag-theme-alpine-dark {
+  --ag-background-color: hsl(var(--background));
+  --ag-foreground-color: hsl(var(--foreground));
+
+  --ag-header-background-color: hsl(var(--muted));
+  --ag-header-foreground-color: hsl(var(--muted-foreground));
+
+  --ag-row-hover-color: hsl(var(--accent));
+  --ag-odd-row-background-color: hsl(var(--background));
+
+  --ag-border-color: hsl(var(--border));
+  --ag-secondary-border-color: hsl(var(--border));
+
+  --ag-input-border-color: hsl(var(--input));
+
+  --ag-selected-row-background-color: hsl(var(--accent));
+}
+
+/* Clean borders & remove harsh grid lines */
+.ag-theme-alpine .ag-root-wrapper {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Header styling */
+.ag-theme-alpine .ag-header {
+  border-bottom: 1px solid hsl(var(--border));
+  font-weight: 600;
+}
+
+/* Rows */
+.ag-theme-alpine .ag-row {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* Remove strong default striping */
+.ag-theme-alpine .ag-row-even {
+  background-color: transparent;
+}
+
+/* Hover (softer) */
+.ag-theme-alpine .ag-row:hover {
+  background-color: hsl(var(--accent));
+}
+
+/* Selected row */
+.ag-theme-alpine .ag-row-selected {
+  background-color: hsl(var(--accent)) !important;
+}
+
+/* Cells */
+.ag-theme-alpine .ag-cell {
+  display: flex;
+  align-items: center;
+}
+
+/* Header text alignment fix */
+.ag-theme-alpine .ag-header-cell-label {
+  justify-content: center;
+}
+
+/* Scrollbars match your app */
+.ag-theme-alpine ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ag-theme-alpine ::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary));
+  border-radius: 3px;
+}
+
+.ag-theme-alpine ::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
 }
